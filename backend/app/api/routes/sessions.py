@@ -661,8 +661,8 @@ async def recreate_session(
 
     # Clean up executor state (queue, locks, processors)
     # Clear message queue if it exists
-    if session_id in executor._message_queues:
-        queue = executor._message_queues[session_id]
+    if session_id in executor._queue_manager._message_queues:
+        queue = executor._queue_manager._message_queues[session_id]
         queue_size = queue.qsize()
         # Drain queue
         while not queue.empty():
@@ -674,12 +674,12 @@ async def recreate_session(
         logger.info(
             "cleared_message_queue", session_id=str(session_id), queue_size=queue_size
         )
-        del executor._message_queues[session_id]
+        del executor._queue_manager._message_queues[session_id]
 
     # Clear processing flag
-    if session_id in executor._processing:
-        executor._processing[session_id] = False
-        del executor._processing[session_id]
+    if session_id in executor._queue_manager._processing:
+        executor._queue_manager._processing[session_id] = False
+        del executor._queue_manager._processing[session_id]
 
     # Cancel queue processor task if running
     if session_id in executor._queue_processors:
