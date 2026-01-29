@@ -94,7 +94,6 @@ async def show_file(args: Dict[str, Any]) -> Dict[str, Any]:
             return _error(f"Path is not a file: {file_path_str}")
 
         # Get file info for logging
-        file_name = file_path.name
         file_size = file_path.stat().st_size
 
         logger.info(
@@ -589,7 +588,10 @@ async def _send_reminder_background(session_id: UUID, delay_seconds: int, messag
 
         # Update session status to WORKING (wake up idle sessions)
         from app.application.services.session_service import SessionService
-        from app.infrastructure.database.repositories import ProjectRepositoryImpl
+        from app.infrastructure.database.repositories import (
+            ProjectRepositoryImpl,
+            SessionRepositoryImpl,
+        )
         from app.infrastructure.filesystem.agent_repository import (
             FileBasedAgentRepository,
         )

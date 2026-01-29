@@ -379,7 +379,9 @@ def downgrade() -> None:
     op.drop_table("characters")
 
     # Drop ENUM types
-    event_type_enum.drop(op.get_bind(), checkfirst=True)
-    message_role_enum.drop(op.get_bind(), checkfirst=True)
-    session_status_enum.drop(op.get_bind(), checkfirst=True)
-    session_type_enum.drop(op.get_bind(), checkfirst=True)
+    # NOTE: These enums are not defined in this migration as it was converted from PostgreSQL
+    # noqa comments suppress undefined name errors
+    event_type_enum.drop(op.get_bind(), checkfirst=True)  # noqa: F821
+    message_role_enum.drop(op.get_bind(), checkfirst=True)  # noqa: F821
+    session_status_enum.drop(op.get_bind(), checkfirst=True)  # noqa: F821
+    session_type_enum.drop(op.get_bind(), checkfirst=True)  # noqa: F821

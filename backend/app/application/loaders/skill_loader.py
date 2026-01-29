@@ -111,7 +111,7 @@ class SkillLoader:
             NotFoundError: If skill not found
             RepositoryError: If symlink creation fails
         """
-        skill = await self.skill_repository.get_by_id(skill_id)
+        _skill = await self.skill_repository.get_by_id(skill_id)
 
         # Get actual filesystem path from repository
         skill_path = await self.skill_repository.get_skill_directory(skill_id)

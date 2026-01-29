@@ -19,7 +19,6 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.types import CHAR
-from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

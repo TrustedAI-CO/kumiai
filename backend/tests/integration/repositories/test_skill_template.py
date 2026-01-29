@@ -86,7 +86,7 @@ class TestSkillTemplate:
         assert len(parts) >= 3  # Empty before first ---, frontmatter, content
 
         # Verify body has proper structure (after frontmatter)
-        body = parts[2]
+        _body = parts[2]
 
         # Check headers are properly formatted (# followed by space)
         assert "\n# Structured Skill\n" in content

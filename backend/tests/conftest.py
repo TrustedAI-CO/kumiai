@@ -129,8 +129,8 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
         join_transaction_mode="create_savepoint",
     )
 
-    async with async_session_maker() as session:
-        yield session
+    async with async_session_maker() as db_sess:
+        yield db_sess
 
     # Rollback the outer transaction to undo all changes
     await transaction.rollback()

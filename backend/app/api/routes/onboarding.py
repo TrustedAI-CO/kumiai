@@ -143,7 +143,7 @@ async def setup_demo(
 
     # Create demo project with team members
     project_data = template.get("project", {})
-    project = await project_service.create_project(
+    _project = await project_service.create_project(
         CreateProjectRequest(
             name=project_data.get("name", "Demo Project"),
             description=project_data.get("description", ""),

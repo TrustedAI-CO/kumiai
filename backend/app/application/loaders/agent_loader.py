@@ -105,7 +105,7 @@ class AgentLoader:
             NotFoundError: If agent not found
             RepositoryError: If symlink creation fails
         """
-        agent = await self.agent_repository.get_by_id(agent_id)
+        _agent = await self.agent_repository.get_by_id(agent_id)
 
         # Get actual filesystem path from repository
         agent_path = await self.agent_repository.get_agent_directory(agent_id)
