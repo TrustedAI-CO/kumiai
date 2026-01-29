@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/dizzyvn/kumiai#readme
+    about: Read the documentation for setup and usage instructions
+  - name: Discussions
+    url: https://github.com/dizzyvn/kumiai/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: Security Issue
+    url: https://github.com/dizzyvn/kumiai/security/advisories/new
+    about: Report a security vulnerability (private disclosure)

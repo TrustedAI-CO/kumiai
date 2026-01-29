@@ -1,0 +1,41 @@
+# ⚠️ DEPRECATED: KumiAI now uses SQLite by default (zero configuration)
+# This docker-compose file is kept for users who prefer PostgreSQL
+# To use PostgreSQL: Update DATABASE_URL in .env to postgresql+asyncpg://...
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kumiai_postgres
+    environment:
+      POSTGRES_USER: kumiai
+      POSTGRES_PASSWORD: kumiai_password
+      POSTGRES_DB: kumiai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kumiai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: PgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: kumiai_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kumiai.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,26 @@
+# Screenshot Placeholders
+
+⚠️ **ACTION REQUIRED**: Replace these placeholders with actual screenshots before publishing!
+
+## Required Screenshots:
+
+1. **kanban.png** - Kanban workflow view showing project management
+2. **running.png** - Application running with active agent sessions
+
+## How to Capture:
+
+See `assets/README.md` for detailed instructions.
+
+## Quick Steps:
+
+```bash
+# Start the application
+cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 7892
+cd frontend && npm run dev
+
+# Take screenshots and save them here as:
+# - assets/kanban.png
+# - assets/running.png
+```
+
+Once screenshots are added, delete this PLACEHOLDER file.

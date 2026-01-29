@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kumiAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@300..700&family=Noto+Sans+Display:wght@300..700&display=swap" rel="stylesheet">
+    <style>
+      /* Prevent emoji flash by forcing Noto Emoji immediately */
+      @font-face {
+        font-family: 'Noto Emoji Fallback';
+        src: local('Noto Color Emoji'), local('Noto Emoji');
+        unicode-range: U+1F000-1F9FF, U+2600-26FF, U+2700-27BF;
+        font-display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

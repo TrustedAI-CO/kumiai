@@ -1,0 +1,20 @@
+# PM management tools for project manager sessions
+name: pm_management
+description: Project management and coordination tools
+enabled: true
+
+tools:
+  - name: spawn_instance
+    description: Create a new work instance for a project task
+
+  - name: get_project_status
+    description: View all instances and their stages
+
+  - name: update_instance_stage
+    description: Move instances through workflow stages
+
+  - name: contact_instance
+    description: Communicate with active instances
+
+  - name: list_team_members
+    description: View available specialists

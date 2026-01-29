@@ -1,0 +1,79 @@
+# Pre-commit hooks for KumiAI
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags in GitHub Actions
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+
+  # Python formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        files: ^backend/
+
+  # Python linting with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.1
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Python type checking (optional, can be slow)
+  # Uncomment to enable mypy in pre-commit
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.14.1
+  #   hooks:
+  #     - id: mypy
+  #       files: ^backend/app/
+  #       additional_dependencies: [types-all]
+
+  # Frontend - Prettier (optional)
+  # Uncomment if you want to format TypeScript/React files
+  # - repo: https://github.com/pre-commit/mirrors-prettier
+  #   rev: v4.0.0-alpha.8
+  #   hooks:
+  #     - id: prettier
+  #       files: ^frontend/src/
+  #       types_or: [javascript, jsx, ts, tsx, json, css]
+
+# Configuration
+default_language_version:
+  python: python3.11
+
+# Files to exclude
+exclude: |
+  (?x)(
+    ^backend/venv/|
+    ^backend/\.venv/|
+    ^frontend/node_modules/|
+    ^frontend/dist/|
+    ^frontend/build/|
+    \.min\.js$|
+    \.min\.css$|
+    ^\.git/
+  )
+
+# Run these hooks on every commit
+default_stages: [pre-commit]
+
+# Fail fast - stop after first failure
+fail_fast: false

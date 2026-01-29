@@ -1,0 +1,11 @@
+# Common tools available to all session types
+name: common_tools
+description: Common communication and utility tools
+enabled: true
+
+tools:
+  - name: contact_pm
+    description: Send a message to the project manager
+
+  - name: remind
+    description: Set a reminder for later

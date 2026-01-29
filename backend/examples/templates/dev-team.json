@@ -1,0 +1,27 @@
+{
+  "name": "Development Team",
+  "description": "Build features end-to-end with frontend, backend, and testing",
+  "skills": ["frontend-dev", "backend-dev", "qa-tester"],
+  "agents": ["product-manager", "frontend-developer", "backend-developer", "qa-tester"],
+  "project": {
+    "name": "Build Todo App Feature",
+    "description": "Demo project for development team workflow",
+    "tasks": [
+      {
+        "title": "Design user login form UI",
+        "description": "Create a responsive login form with email and password fields. Include validation and loading states.",
+        "assigned_to": "frontend-developer"
+      },
+      {
+        "title": "Build authentication API endpoint",
+        "description": "Create POST /api/auth/login endpoint with validation, JWT token generation, and error handling.",
+        "assigned_to": "backend-developer"
+      },
+      {
+        "title": "Write tests for login flow",
+        "description": "Create unit tests for both frontend components and backend API. Include success and error cases.",
+        "assigned_to": "qa-tester"
+      }
+    ]
+  }
+}

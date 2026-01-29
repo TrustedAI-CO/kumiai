@@ -1,0 +1,102 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+**/venv/lib/
+**/venv/lib64/
+**/env/lib/
+**/env/lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+venv-*/
+env/
+ENV/
+.venv
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Build outputs
+*.exe
+*.out
+*.app
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Node (for frontend)
+node_modules/
+frontend/dist/
+
+# Runtime Data / Sessions
+.sessions/
+projects/
+
+# Claude and Project files
+.claude/
+PROJECT.md
+/agents/
+backend/temp_uploads/
+
+# Internal development docs (keep technical docs in backend/docs/)
+backend/docs/SPRINT_*.md
+backend/docs/PROGRESS.md
+backend/docs/IMPLEMENTATION_PLAN.md
+backend/docs/MIGRATION_GUIDE.md

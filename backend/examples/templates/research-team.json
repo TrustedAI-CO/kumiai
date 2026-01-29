@@ -1,0 +1,27 @@
+{
+  "name": "Research Team",
+  "description": "Research, analyze, and synthesize information into insights",
+  "skills": ["researcher", "data-analyst", "report-writer"],
+  "agents": ["product-manager", "research-analyst", "data-analyst", "report-writer"],
+  "project": {
+    "name": "Market Research Analysis",
+    "description": "Demo project for research team workflow",
+    "tasks": [
+      {
+        "title": "Research competitor features",
+        "description": "Identify top 5 competitors in project management space. List their key features, pricing, and unique selling points.",
+        "assigned_to": "research-analyst"
+      },
+      {
+        "title": "Analyze user feedback data",
+        "description": "Analyze collected user feedback to identify patterns, common pain points, and feature requests. Prioritize by frequency and impact.",
+        "assigned_to": "data-analyst"
+      },
+      {
+        "title": "Create executive summary report",
+        "description": "Synthesize research and analysis findings into executive summary with key insights and actionable recommendations.",
+        "assigned_to": "report-writer"
+      }
+    ]
+  }
+}

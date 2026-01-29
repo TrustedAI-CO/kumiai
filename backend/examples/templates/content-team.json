@@ -1,0 +1,27 @@
+{
+  "name": "Content Team",
+  "description": "Create documentation and content collaboratively",
+  "skills": ["tech-writer", "content-writer", "editor"],
+  "agents": ["product-manager", "technical-writer", "content-writer", "editor"],
+  "project": {
+    "name": "Documentation Sprint",
+    "description": "Demo project for content team workflow",
+    "tasks": [
+      {
+        "title": "Write API documentation for /users endpoint",
+        "description": "Create comprehensive API docs including parameters, request/response examples, error codes, and authentication requirements.",
+        "assigned_to": "technical-writer"
+      },
+      {
+        "title": "Create getting started tutorial",
+        "description": "Write user-friendly tutorial for new users explaining how to create their first project and get started with the platform.",
+        "assigned_to": "content-writer"
+      },
+      {
+        "title": "Review and edit all documentation",
+        "description": "Review both the API docs and tutorial for clarity, grammar, consistency, and overall quality. Provide constructive feedback.",
+        "assigned_to": "editor"
+      }
+    ]
+  }
+}

@@ -1,0 +1,34 @@
+# FastAPI and server
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+sse-starlette==2.2.1
+
+# Database - SQLite (zero-config, portable)
+aiosqlite==0.20.0
+sqlalchemy[asyncio]==2.0.36
+alembic==1.14.0
+# Note: For PostgreSQL, replace aiosqlite with: asyncpg==0.30.0 and psycopg2-binary==2.9.10
+
+# Pydantic for validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+email-validator==2.2.0
+
+# Claude SDK and AI
+anthropic==0.42.0
+
+# Utilities
+python-dotenv==1.0.1
+aiofiles==24.1.0
+httpx==0.28.1
+
+# Dependency Injection
+dependency-injector==4.43.0
+
+# Structured Logging
+structlog==24.4.0
+python-json-logger==3.2.1
+
+# Monitoring (optional)
+prometheus-client==0.21.0
