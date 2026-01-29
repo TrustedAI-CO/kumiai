@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt', 'backend/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run linting (Ruff)
+        working-directory: backend
+        run: ruff check app/
+
+      - name: Run formatting check (Black)
+        working-directory: backend
+        run: black --check app/
+
+      - name: Run type checking (mypy)
+        working-directory: backend
+        run: mypy app/
+        continue-on-error: true  # Don't fail build on type errors initially
+
+      - name: Run tests with coverage
+        working-directory: backend
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'sk-ant-test-key-for-ci' }}
+        run: |
+          pytest tests/ --cov=app --cov-report=xml --cov-report=term
+        continue-on-error: true  # Don't fail until tests are implemented
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+        continue-on-error: true
+
+  frontend-build:
+    name: Frontend Build & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run type checking
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Check bundle size
+        working-directory: frontend
+        run: |
+          echo "Checking bundle sizes..."
+          du -h dist/assets/*.js | sort -h
+        continue-on-error: true
+
+  lint-commits:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages
+        run: |
+          echo "Checking commit messages follow Conventional Commits..."
+          git log --format=%s origin/${{ github.base_ref }}..HEAD | while read -r msg; do
+            if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?(!)?:'; then
+              echo "❌ Invalid commit message: $msg"
+              echo "Expected format: type(scope): description"
+              echo "Types: feat, fix, docs, style, refactor, perf, test, chore, ci"
+              exit 1
+            else
+              echo "✅ Valid: $msg"
+            fi
+          done
+
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"  # Don't fail build, just report
+        continue-on-error: true
+
+      - name: Check for secrets in code
+        run: |
+          echo "Checking for potential secrets..."
+          ! git grep -E '(ANTHROPIC_API_KEY|sk-ant-)' -- '*.py' '*.ts' '*.tsx' '*.js' || exit 1
+        continue-on-error: true
