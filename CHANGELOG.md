@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MIT License
 - Community contribution guidelines
+- Session error recovery: Allow input and message sending even when sessions are in ERROR state
 
 ## [0.1.0] - 2026-01-26
 
