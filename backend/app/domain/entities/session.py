@@ -58,7 +58,7 @@ class Session:
 
     def complete_task(self) -> None:
         """
-        Mark task as completed (transition to idle state).
+        Mark task as completed (transition to done state).
 
         Raises:
             InvalidStateTransition: If not in working state
@@ -67,7 +67,7 @@ class Session:
             raise InvalidStateTransition(
                 f"Cannot complete task from status '{self.status.value}'"
             )
-        self.status = SessionStatus.IDLE
+        self.status = SessionStatus.DONE
         self._update_timestamp()
 
     def fail(self, error: str) -> None:
@@ -97,14 +97,18 @@ class Session:
 
     def resume(self) -> None:
         """
-        Resume session from error or interrupted state.
+        Resume session from error, interrupted, or done state.
 
         Raises:
-            InvalidStateTransition: If not in error or interrupted state
+            InvalidStateTransition: If not in error, interrupted, or done state
         """
-        if self.status not in [SessionStatus.ERROR, SessionStatus.INTERRUPTED]:
+        if self.status not in [
+            SessionStatus.ERROR,
+            SessionStatus.INTERRUPTED,
+            SessionStatus.DONE,
+        ]:
             raise InvalidStateTransition(
-                f"Can only resume from error or interrupted state, not '{self.status.value}'"
+                f"Can only resume from error, interrupted, or done state, not '{self.status.value}'"
             )
         self.status = SessionStatus.IDLE
         self.error_message = None
@@ -166,6 +170,9 @@ class Session:
         - WORKING → active
         - IDLE → waiting
         - ERROR → waiting
+        - INTERRUPTED → waiting
+        - DONE → done
+        - CANCELLED → cancelled
 
         This method updates the session's context dict in place.
         """
@@ -174,6 +181,9 @@ class Session:
             SessionStatus.WORKING: "active",
             SessionStatus.IDLE: "waiting",
             SessionStatus.ERROR: "waiting",
+            SessionStatus.INTERRUPTED: "waiting",
+            SessionStatus.DONE: "done",
+            SessionStatus.CANCELLED: "cancelled",
         }
 
         if self.status in status_to_stage:
