@@ -258,6 +258,7 @@ async def contact_instance(args: Dict[str, Any]) -> Dict[str, Any]:
             message=message,
             sender_name=sender_name,
             sender_session_id=source_instance_id,
+            sender_agent_id=source_instance.agent_id,
         )
 
         logger.info(
