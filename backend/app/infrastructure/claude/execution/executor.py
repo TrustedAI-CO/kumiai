@@ -560,7 +560,7 @@ class SessionExecutor:
     async def _broadcast_queue_status(self, session_id: UUID) -> None:
         """Broadcast queue status to SSE."""
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.claude.events import (
+        from app.infrastructure.claude.streaming.events import (
             QueueStatusEvent,
             QueuedMessagePreview,
         )

@@ -144,8 +144,8 @@ class Execution:
 
         Exits when queue empty + MessageCompleteEvent received.
         """
-        from app.infrastructure.claude.text_buffer_manager import TextBufferManager
-        from app.infrastructure.claude.events import (
+        from app.infrastructure.claude.streaming.text_buffer import TextBufferManager
+        from app.infrastructure.claude.streaming.events import (
             ContentBlockStopEvent,
             MessageStartEvent,
             StreamDeltaEvent,
@@ -233,7 +233,7 @@ class Execution:
 
     def _format_message(self, queued_msg: QueuedMessage) -> dict:
         """Format queued message for Claude."""
-        from app.infrastructure.claude.batch_message_processor import (
+        from app.infrastructure.claude.streaming.batch_processor import (
             BatchMessageProcessor,
         )
 
@@ -247,8 +247,8 @@ class Execution:
     async def _save_and_broadcast_user_message(self, queued_msg: QueuedMessage) -> None:
         """Save user message to database and broadcast via SSE."""
         from app.infrastructure.database.repositories import MessageRepositoryImpl
-        from app.infrastructure.claude.message_persistence import MessagePersistence
-        from app.infrastructure.claude.events import UserMessageEvent
+        from app.infrastructure.claude.streaming.persistence import MessagePersistence
+        from app.infrastructure.claude.streaming.events import UserMessageEvent
         from app.infrastructure.sse.manager import sse_manager
 
         # Save to database (with lock to prevent concurrent flushes)

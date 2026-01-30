@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions
 
-from app.infrastructure.claude.client import ClaudeClient
+from app.infrastructure.claude.core.client import ClaudeClient
 from app.infrastructure.claude.exceptions import (
     ClaudeConnectionError,
     ClaudeExecutionError,
@@ -45,7 +45,7 @@ def mock_sdk_client():
 class TestClaudeClient:
     """Tests for ClaudeClient wrapper."""
 
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     def test_init(self, mock_sdk_class, mock_options):
         """Test ClaudeClient initialization."""
         mock_sdk_instance = MagicMock()
@@ -61,7 +61,7 @@ class TestClaudeClient:
         mock_sdk_class.assert_called_once_with(options=mock_options)
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_connect_success(self, mock_sdk_class, mock_options):
         """Test successful connection with timeout."""
         mock_sdk_instance = AsyncMock()
@@ -76,7 +76,7 @@ class TestClaudeClient:
         mock_sdk_instance.connect.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_connect_timeout(self, mock_sdk_class, mock_options):
         """Test connection timeout raises ClaudeConnectionError."""
 
@@ -96,7 +96,7 @@ class TestClaudeClient:
         assert client._connected is False
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_connect_failure(self, mock_sdk_class, mock_options):
         """Test connection failure raises ClaudeConnectionError."""
         mock_sdk_instance = AsyncMock()
@@ -113,7 +113,7 @@ class TestClaudeClient:
         assert client._connected is False
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_query_sends_message(self, mock_sdk_class, mock_options):
         """Test query sends message to SDK."""
         mock_sdk_instance = AsyncMock()
@@ -127,7 +127,7 @@ class TestClaudeClient:
         mock_sdk_instance.query.assert_called_once_with("Hello, Claude!")
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_query_failure(self, mock_sdk_class, mock_options):
         """Test query failure raises ClaudeExecutionError."""
         mock_sdk_instance = AsyncMock()
@@ -140,7 +140,7 @@ class TestClaudeClient:
             await client.query("Hello")
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_receive_messages_captures_session_id(
         self, mock_sdk_class, mock_options
     ):
@@ -180,7 +180,7 @@ class TestClaudeClient:
         assert client.get_session_id() == "test-session-123"
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_receive_messages_without_init(self, mock_sdk_class, mock_options):
         """Test receive_messages without init message."""
         content_message = MagicMock()
@@ -203,7 +203,7 @@ class TestClaudeClient:
         assert client.get_session_id() is None
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_receive_messages_failure(self, mock_sdk_class, mock_options):
         """Test receive_messages failure raises ClaudeExecutionError."""
 
@@ -222,7 +222,7 @@ class TestClaudeClient:
                 pass
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_interrupt(self, mock_sdk_class, mock_options):
         """Test interrupt calls SDK interrupt."""
         mock_sdk_instance = AsyncMock()
@@ -236,7 +236,7 @@ class TestClaudeClient:
         mock_sdk_instance.interrupt.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_interrupt_failure(self, mock_sdk_class, mock_options):
         """Test interrupt failure raises ClaudeExecutionError."""
         mock_sdk_instance = AsyncMock()
@@ -251,7 +251,7 @@ class TestClaudeClient:
             await client.interrupt()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_is_alive_not_connected(self, mock_sdk_class, mock_options):
         """Test is_alive returns False when not connected."""
         mock_sdk_instance = AsyncMock()
@@ -262,7 +262,7 @@ class TestClaudeClient:
         assert client.is_alive() is False
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_is_alive_subprocess_running(self, mock_sdk_class, mock_options):
         """Test is_alive returns True when subprocess is running."""
         # Create mock subprocess
@@ -283,7 +283,7 @@ class TestClaudeClient:
         assert client.is_alive() is True
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_is_alive_subprocess_died(self, mock_sdk_class, mock_options):
         """Test is_alive returns False when subprocess has died."""
         # Create mock subprocess that died
@@ -304,7 +304,7 @@ class TestClaudeClient:
         assert client.is_alive() is False
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_disconnect(self, mock_sdk_class, mock_options):
         """Test disconnect calls SDK disconnect."""
         mock_sdk_instance = AsyncMock()
@@ -321,7 +321,7 @@ class TestClaudeClient:
         mock_sdk_instance.disconnect.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_disconnect_when_not_connected(self, mock_sdk_class, mock_options):
         """Test disconnect when not connected doesn't call SDK."""
         mock_sdk_instance = AsyncMock()
@@ -335,7 +335,7 @@ class TestClaudeClient:
         mock_sdk_instance.disconnect.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_disconnect_failure(self, mock_sdk_class, mock_options):
         """Test disconnect failure raises ClaudeExecutionError."""
         mock_sdk_instance = AsyncMock()
@@ -352,7 +352,7 @@ class TestClaudeClient:
             await client.disconnect()
 
     @pytest.mark.asyncio
-    @patch("app.infrastructure.claude.client.ClaudeSDKClient")
+    @patch("app.infrastructure.claude.core.client.ClaudeSDKClient")
     async def test_get_session_id_before_capture(self, mock_sdk_class, mock_options):
         """Test get_session_id returns None before capture."""
         mock_sdk_instance = AsyncMock()

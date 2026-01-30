@@ -18,7 +18,9 @@ from app.domain.repositories import (
     SessionRepository,
 )
 from app.domain.value_objects import SessionStatus, SessionType, MessageRole
-from app.infrastructure.claude.session_status_manager import session_status_manager
+from app.infrastructure.claude.state.session_status_manager import (
+    session_status_manager,
+)
 
 
 class SessionService:

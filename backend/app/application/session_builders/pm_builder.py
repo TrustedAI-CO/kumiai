@@ -92,7 +92,9 @@ class PMSessionBuilder(SessionBuilder):
         )
 
         # Import hook for project_id injection
-        from app.infrastructure.claude.hooks import inject_session_context_hook
+        from app.infrastructure.claude.execution.hooks import (
+            inject_session_context_hook,
+        )
 
         # Build options dictionary
         options_dict = {

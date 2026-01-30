@@ -25,8 +25,10 @@ from app.application.dtos.session_dto import SessionDTO
 from app.application.services import SessionService, MessageService
 from app.application.services.agent_service import AgentService
 from app.application.services.project_service import ProjectService
-from app.infrastructure.claude.executor import SessionExecutor
-from app.infrastructure.claude.session_status_manager import session_status_manager
+from app.infrastructure.claude.execution.executor import SessionExecutor
+from app.infrastructure.claude.state.session_status_manager import (
+    session_status_manager,
+)
 from app.infrastructure.database.connection import get_repository_session
 from app.infrastructure.database.repositories import (
     MessageRepositoryImpl,
@@ -776,7 +778,7 @@ async def execute_query(
 
         # Broadcast user message event to SSE clients
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.claude.events import UserMessageEvent
+        from app.infrastructure.claude.streaming.events import UserMessageEvent
 
         user_msg_event = UserMessageEvent(
             session_id=str(session_id),

@@ -2,8 +2,8 @@
 
 from claude_agent_sdk import types
 
-from app.infrastructure.claude.message_converter import convert_message_to_events
-from app.infrastructure.claude.events import (
+from app.infrastructure.claude.streaming.converter import convert_message_to_events
+from app.infrastructure.claude.streaming.events import (
     StreamDeltaEvent,
     ToolUseEvent,
     ToolCompleteEvent,
@@ -99,7 +99,7 @@ class TestMessageConverter:
 
     def test_stream_event_with_content_block_stop(self):
         """StreamEvent with content_block_stop produces ContentBlockStopEvent."""
-        from app.infrastructure.claude.events import ContentBlockStopEvent
+        from app.infrastructure.claude.streaming.events import ContentBlockStopEvent
 
         stream_event = types.StreamEvent(
             uuid="evt-stop",

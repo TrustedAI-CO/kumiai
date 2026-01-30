@@ -48,7 +48,7 @@ class BatchMessageProcessor:
             List of merged message entities
         """
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.claude.events import UserMessageEvent
+        from app.infrastructure.claude.streaming.events import UserMessageEvent
 
         # Group by sender
         grouped_messages = defaultdict(list)

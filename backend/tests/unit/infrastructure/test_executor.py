@@ -4,12 +4,12 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from uuid import uuid4
 
-from app.infrastructure.claude.executor import SessionExecutor
+from app.infrastructure.claude.execution.executor import SessionExecutor
 from app.infrastructure.claude.exceptions import (
     ClaudeExecutionError,
     ClientNotFoundError,
 )
-from app.infrastructure.claude.events import (
+from app.infrastructure.claude.streaming.events import (
     ContentBlockEvent,
     MessageCompleteEvent,
 )
