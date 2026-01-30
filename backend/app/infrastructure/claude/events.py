@@ -135,11 +135,20 @@ class MessageCompleteEvent:
     """Assistant response completed."""
 
     session_id: str
+    has_more_messages: bool = False  # True if more messages are queued for processing
     type: Literal["message_complete"] = "message_complete"
 
     def to_sse(self) -> Dict[str, Any]:
         """Convert to SSE format."""
-        return {"event": self.type, "data": json.dumps({"session_id": self.session_id})}
+        return {
+            "event": self.type,
+            "data": json.dumps(
+                {
+                    "session_id": self.session_id,
+                    "has_more_messages": self.has_more_messages,
+                }
+            ),
+        }
 
 
 @dataclass

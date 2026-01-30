@@ -18,6 +18,7 @@ from app.domain.repositories import (
     SessionRepository,
 )
 from app.domain.value_objects import SessionStatus, SessionType, MessageRole
+from app.infrastructure.claude.session_status_manager import session_status_manager
 
 
 class SessionService:
@@ -408,11 +409,11 @@ class SessionService:
 
         # Transition to WORKING (from INITIALIZING or IDLE)
         if session.status in [SessionStatus.INITIALIZING, SessionStatus.IDLE]:
-            session.status = SessionStatus.WORKING
-            # Sync kanban stage with new status (uses domain entity method)
-            session.sync_kanban_stage()
-            updated = await self._session_repo.update(session)
-            return SessionDTO.from_entity(updated)
+            # Use SessionStatusManager for centralized, thread-safe status update
+            await session_status_manager.update_to_working(session_id)
+            # Re-fetch the updated session
+            updated = await self._session_repo.get_by_id(session_id)
+            return SessionDTO.from_entity(updated) if updated else None
 
         # Session exists but not in transitionable state
         return None

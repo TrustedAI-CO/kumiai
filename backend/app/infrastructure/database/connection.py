@@ -7,6 +7,7 @@ using SQLAlchemy 2.0 async engine and sessions.
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -40,12 +41,24 @@ def get_engine() -> AsyncEngine:
         is_sqlite = database_url.startswith("sqlite")
 
         if is_sqlite:
-            # SQLite-specific configuration
+            # SQLite-specific configuration for better concurrency
             _engine = create_async_engine(
                 database_url,
                 echo=False,
-                connect_args={"check_same_thread": False},  # Required for SQLite
+                connect_args={
+                    "check_same_thread": False,  # Required for SQLite with async
+                    "timeout": 30,  # Wait up to 30 seconds for locks
+                },
             )
+
+            # Enable WAL mode for better concurrency (allows multiple readers + 1 writer)
+            @event.listens_for(_engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_conn, connection_record):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=30000")  # 30 second timeout
+                cursor.close()
+
         else:
             # PostgreSQL or other database configuration
             _engine = create_async_engine(

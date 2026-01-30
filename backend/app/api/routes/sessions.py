@@ -26,6 +26,7 @@ from app.application.services import SessionService, MessageService
 from app.application.services.agent_service import AgentService
 from app.application.services.project_service import ProjectService
 from app.infrastructure.claude.executor import SessionExecutor
+from app.infrastructure.claude.session_status_manager import session_status_manager
 from app.infrastructure.database.connection import get_repository_session
 from app.infrastructure.database.repositories import (
     MessageRepositoryImpl,
@@ -35,7 +36,7 @@ from app.infrastructure.database.repositories import (
 from app.infrastructure.filesystem.agent_repository import FileBasedAgentRepository
 from app.core.config import settings
 from app.domain.entities import Message
-from app.domain.value_objects import MessageRole, SessionStatus
+from app.domain.value_objects import MessageRole
 from app.core.dependencies import get_db
 from app.core.logging import get_logger
 from uuid import uuid4
@@ -131,8 +132,6 @@ async def _update_session_status(
         session_id: Session UUID
         executor: SessionExecutor to get Claude session ID
     """
-    from app.domain.value_objects import SessionStatus
-
     # Get Claude session ID for resume functionality
     claude_session_id = await executor.get_claude_session_id(session_id)
 
@@ -143,40 +142,12 @@ async def _update_session_status(
         has_claude_session_id=bool(claude_session_id),
     )
 
-    async with get_repository_session() as db:
-        session_repo = SessionRepositoryImpl(db)
-        db_session = await session_repo.get_by_id(session_id)
-
-        if db_session:
-            logger.info(
-                "updating_session_to_idle",
-                session_id=str(session_id),
-                old_status=db_session.status.value,
-                old_claude_session_id=db_session.claude_session_id,
-                new_claude_session_id=claude_session_id,
-            )
-            db_session.status = SessionStatus.IDLE
-            if claude_session_id:
-                db_session.claude_session_id = claude_session_id
-                logger.info(
-                    "saved_claude_session_id_to_db",
-                    session_id=str(session_id),
-                    claude_session_id=claude_session_id,
-                )
-            else:
-                logger.warning(
-                    "no_claude_session_id_to_save",
-                    session_id=str(session_id),
-                    message="Claude session ID not available - session may not resume after reload",
-                )
-            # Sync kanban stage with new status (uses domain entity method)
-            db_session.sync_kanban_stage()
-            await session_repo.update(db_session)
-            logger.info(
-                "session_completed",
-                session_id=str(session_id),
-                claude_session_id=claude_session_id,
-            )
+    # Use SessionStatusManager to update status (centralized, thread-safe)
+    await session_status_manager.update_after_execution(
+        session_id=session_id,
+        execution_error=None,
+        claude_session_id=claude_session_id,
+    )
 
 
 @router.post(
@@ -600,17 +571,6 @@ async def recreate_session(
             "deleted_session_messages", session_id=str(session_id), count=deleted_count
         )
 
-        # Reset session to clean state
-        session.status = SessionStatus.IDLE
-        session.claude_session_id = None  # Force new client creation
-        session.error_message = None
-
-        # Update kanban stage to match IDLE status (waiting) - uses domain entity method
-        session.sync_kanban_stage()
-
-        # Persist changes
-        await session_repo.update(session)
-
         # Create welcome message for supported session types
         from app.domain.config.welcome_messages import get_welcome_message
 
@@ -658,6 +618,11 @@ async def recreate_session(
             cleared_error=had_error,
             deleted_messages=deleted_count,
         )
+
+    # Reset session to IDLE using SessionStatusManager (centralized, thread-safe)
+    await session_status_manager.reset_to_idle(
+        session_id=session_id, clear_claude_session=True
+    )
 
     # Clean up executor state (queue, locks, processors)
     # Clear message queue if it exists
@@ -764,7 +729,6 @@ async def execute_query(
         event: message_complete
         data: {"session_id": "..."}
     """
-    from app.domain.value_objects import SessionStatus
     from app.infrastructure.database.connection import get_repository_session
     from app.infrastructure.database.repositories import (
         MessageRepositoryImpl,
@@ -831,8 +795,6 @@ async def execute_query(
         """Generate SSE events for query execution."""
         # Import SSE manager and asyncio
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.database.connection import get_repository_session
-        from app.infrastructure.database.repositories import SessionRepositoryImpl
 
         # Create event queue for this SSE connection
         event_queue: asyncio.Queue = asyncio.Queue()
@@ -842,27 +804,8 @@ async def execute_query(
             await sse_manager.register(session_id, event_queue)
             logger.info("sse_client_registered", extra={"session_id": str(session_id)})
 
-            # Update session status to WORKING
-            async with get_repository_session() as db:
-                session_repo = SessionRepositoryImpl(db)
-                db_session = await session_repo.get_by_id(session_id)
-                if db_session:
-                    # Transition to WORKING (from INITIALIZING or IDLE)
-                    if db_session.status in [
-                        SessionStatus.INITIALIZING,
-                        SessionStatus.IDLE,
-                    ]:
-                        db_session.status = SessionStatus.WORKING
-                        # Sync kanban stage with new status (uses domain entity method)
-                        db_session.sync_kanban_stage()
-                        await session_repo.update(db_session)
-                        logger.info(
-                            "session_status_updated",
-                            session_id=str(session_id),
-                            status=SessionStatus.WORKING.value,
-                        )
-
-                await db.commit()
+            # NOTE: Session status will be updated to WORKING by the queue processor
+            # Updating it here was causing race conditions and database locks
 
             # Enqueue the message for execution (fire-and-forget)
             await executor.enqueue(
@@ -929,15 +872,12 @@ async def execute_query(
                 exc_info=True,
             )
 
-            # Update session status to ERROR
+            # Update session status to ERROR using SessionStatusManager
             try:
-                async with get_repository_session() as error_db:
-                    error_session_repo = SessionRepositoryImpl(error_db)
-                    error_db_session = await error_session_repo.get_by_id(session_id)
-                    if error_db_session:
-                        error_db_session.status = SessionStatus.ERROR
-                        error_db_session.error_message = str(e)
-                        await error_session_repo.update(error_db_session)
+                await session_status_manager.update_after_execution(
+                    session_id=session_id,
+                    execution_error=e,
+                )
             except Exception as update_error:
                 logger.error("failed_to_update_session_status", error=str(update_error))
 
@@ -987,8 +927,8 @@ async def enqueue_message(
     # NOTE: Message will be saved by _process_queue when consumed from queue
     # This ensures consistent save behavior for both user and agent-to-agent messages
 
-    # Update session status to WORKING (using service method)
-    await service.transition_to_working(session_id)
+    # NOTE: Session status will be updated to WORKING by the queue processor
+    # Updating it here causes race conditions and database locks
 
     # Enqueue the message for execution
     await executor.enqueue(

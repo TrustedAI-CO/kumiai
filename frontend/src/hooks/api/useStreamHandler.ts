@@ -97,13 +97,18 @@ export function useStreamHandler({
           break;
 
         case 'message_complete':
-          console.log('[Chat] Message complete - conversation done');
+          const messageCompleteEvent = event as any;
+          const hasMoreMessages = messageCompleteEvent.has_more_messages || false;
+          console.log('[Chat] Message complete - has more:', hasMoreMessages);
           // Complete the assistant message bubble
           if (currentResponseIdRef.current !== null) {
             completeAssistantMessage();
             currentResponseIdRef.current = null;
           }
-          setIsSending(false);
+          // Only set isSending to false if no more messages are queued
+          if (!hasMoreMessages) {
+            setIsSending(false);
+          }
           break;
 
         case 'tool_use':
