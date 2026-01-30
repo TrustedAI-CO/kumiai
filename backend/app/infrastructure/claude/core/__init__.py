@@ -1,0 +1,9 @@
+"""Core Claude client functionality."""
+
+from app.infrastructure.claude.core.client import ClaudeClient
+from app.infrastructure.claude.core.client_manager import ClaudeClientManager
+
+__all__ = [
+    "ClaudeClient",
+    "ClaudeClientManager",
+]

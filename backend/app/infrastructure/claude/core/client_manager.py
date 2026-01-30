@@ -14,7 +14,7 @@ from app.core.logging import get_logger
 from app.domain.entities.session import Session
 from app.domain.repositories.agent_repository import AgentRepository
 from app.domain.repositories.skill_repository import SkillRepository
-from app.infrastructure.claude.client import ClaudeClient
+from app.infrastructure.claude.core.client import ClaudeClient
 from app.infrastructure.claude.config import ClaudeSettings
 from app.infrastructure.claude.exceptions import (
     AgentNotFoundError,

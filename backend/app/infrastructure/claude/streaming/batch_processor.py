@@ -7,7 +7,7 @@ from collections import defaultdict
 from app.core.logging import get_logger
 from app.infrastructure.claude.types import QueuedMessage
 from app.domain.entities import Message as MessageEntity
-from app.infrastructure.claude.message_persistence import MessagePersistence
+from app.infrastructure.claude.streaming.persistence import MessagePersistence
 from app.infrastructure.database.repositories import MessageRepositoryImpl
 
 logger = get_logger(__name__)
