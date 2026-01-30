@@ -236,7 +236,9 @@ class SessionExecutor:
             )
 
             # Register execution for hooks (pending - will be moved to main registry on first hook)
-            from app.infrastructure.claude.hooks import register_pending_execution
+            from app.infrastructure.claude.execution.hooks import (
+                register_pending_execution,
+            )
 
             # Extract project_id and source_instance_id from session entity
             project_id = (
@@ -321,7 +323,7 @@ class SessionExecutor:
 
         finally:
             # Unregister execution from hooks
-            from app.infrastructure.claude.hooks import unregister_execution
+            from app.infrastructure.claude.execution.hooks import unregister_execution
 
             unregister_execution(str(session_id))
 
@@ -654,7 +656,7 @@ class SessionExecutor:
     async def _broadcast_queue_status(self, session_id: UUID) -> None:
         """Broadcast queue status to SSE."""
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.claude.events import (
+        from app.infrastructure.claude.streaming.events import (
             QueueStatusEvent,
             QueuedMessagePreview,
         )
