@@ -31,11 +31,13 @@ class SessionStatusManager:
     - IDLE/INITIALIZING → WORKING (when processing starts)
     - WORKING → IDLE (when processing completes successfully)
     - WORKING → ERROR (when processing fails)
+    - ERROR → WORKING (when user sends new message to recover)
+    - ERROR → IDLE (when resetting/resuming from error state)
     - Any status → INTERRUPTED (when user interrupts)
 
     Thread Safety:
     - Uses per-session asyncio.Lock to prevent concurrent updates
-    - Validates state transitions
+    - Has transition validation (currently not enforced in update methods)
     - Handles database commits atomically
 
     Also handles:
@@ -67,7 +69,12 @@ class SessionStatusManager:
         - IDLE/INITIALIZING → WORKING
         - WORKING → IDLE
         - WORKING → ERROR
+        - ERROR → WORKING (recovery by sending new message)
+        - ERROR → IDLE (resume to idle after error)
         - Any status → INTERRUPTED
+
+        NOTE: This method is currently not called. Consider integrating it
+        into update methods for proper validation.
         """
         if to_status == SessionStatus.INTERRUPTED:
             return True
@@ -76,6 +83,10 @@ class SessionStatusManager:
             SessionStatus.IDLE: {SessionStatus.WORKING},
             SessionStatus.INITIALIZING: {SessionStatus.WORKING},
             SessionStatus.WORKING: {SessionStatus.IDLE, SessionStatus.ERROR},
+            SessionStatus.ERROR: {
+                SessionStatus.WORKING,  # Recovery by sending new message
+                SessionStatus.IDLE,  # Resume to idle
+            },
         }
 
         return to_status in valid_transitions.get(from_status, set())

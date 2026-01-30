@@ -132,7 +132,7 @@ export function AgentAssistantChat({
             role="agent_assistant"
             onClose={onToggle}
             className="h-full"
-            readOnly={sessionStatus === 'error'}
+            readOnly={false}
             onAutoSave={handleAutoSave}
             onNewSession={handleRecreateAgentAssistant}
             showHeader={false}

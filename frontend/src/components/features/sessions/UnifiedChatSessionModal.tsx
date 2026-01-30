@@ -102,7 +102,7 @@ export function UnifiedChatSessionModal({
             instanceId={agent.instance_id}
             role="specialist"
             className="h-full"
-            readOnly={sessionStatus === 'error'}
+            readOnly={false}
             showHeader={!inline}
             userAvatar={profile?.avatar || undefined}
             onClose={onClose}
