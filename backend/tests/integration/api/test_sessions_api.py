@@ -104,7 +104,7 @@ class TestSessionsAPI:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["status"] == "completed"
+        assert data["status"] == "done"
 
     @pytest.mark.asyncio
     async def test_interrupt_session_success(self, client, session):
@@ -122,14 +122,14 @@ class TestSessionsAPI:
     @pytest.mark.asyncio
     async def test_resume_session_success(self, client, session):
         """Test POST /api/v1/sessions/{id}/resume."""
-        # Start and complete session first (resume only works from completed/error states)
+        # Start and complete session first (resume only works from done/error states)
         await client.post(f"/api/v1/sessions/{session.id}/start")
         await client.post(f"/api/v1/sessions/{session.id}/complete")
 
-        # Resume it (should transition from completed back to idle)
+        # Resume it (should transition from done back to idle)
         response = await client.post(f"/api/v1/sessions/{session.id}/resume")
 
-        # Resume should work from completed state
+        # Resume should work from done state
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["status"] == "idle"

@@ -139,6 +139,9 @@ class ClaudeClientManager:
                         error=str(e),
                     )
 
+                    # Clear stale claude_session_id from database
+                    await self._clear_stale_session_id(session_id)
+
                     # Retry without resume using SessionFactory
                     _, options_fresh = await self._session_factory.create_session(
                         session_type=session.session_type,
@@ -166,6 +169,11 @@ class ClaudeClientManager:
 
             # Store client
             self._clients[session_id] = client
+
+            # NOTE: We do NOT capture claude_session_id here because Claude SDK only
+            # sends session_id in the first RESPONSE message after a query is sent.
+            # At this point, we've only connected - no query sent yet.
+            # Session ID will be captured and saved by executor after first query/response.
 
             logger.info(
                 "claude_client_created",
@@ -304,3 +312,79 @@ class ClaudeClientManager:
             or "conversation not found" in error_lower
             or "exit code 1" in error_lower
         )
+
+    async def _save_claude_session_id_to_db(
+        self, session_id: UUID, claude_session_id: str
+    ) -> None:
+        """
+        Save claude_session_id to database immediately after capture.
+
+        This ensures the database is always the single source of truth
+        for session IDs, enabling resume after server restarts.
+
+        Args:
+            session_id: Internal session UUID
+            claude_session_id: Claude SDK session ID to save
+        """
+        try:
+            from app.infrastructure.database.connection import get_repository_session
+            from app.infrastructure.database.repositories import SessionRepositoryImpl
+
+            async with get_repository_session() as db:
+                session_repo = SessionRepositoryImpl(db)
+                session_entity = await session_repo.get_by_id(session_id)
+
+                if session_entity:
+                    session_entity.claude_session_id = claude_session_id
+                    await session_repo.update(session_entity)
+                    await db.commit()
+
+                    logger.info(
+                        "claude_session_id_saved_to_db",
+                        session_id=str(session_id),
+                        claude_session_id=claude_session_id,
+                    )
+        except Exception as e:
+            logger.error(
+                "failed_to_save_claude_session_id_to_db",
+                session_id=str(session_id),
+                claude_session_id=claude_session_id,
+                error=str(e),
+            )
+
+    async def _clear_stale_session_id(self, session_id: UUID) -> None:
+        """
+        Clear stale claude_session_id from database when resume fails.
+
+        Args:
+            session_id: Session identifier
+        """
+        try:
+            from app.infrastructure.database.connection import get_repository_session
+            from app.infrastructure.database.repositories import SessionRepositoryImpl
+
+            async with get_repository_session() as db:
+                session_repo = SessionRepositoryImpl(db)
+                session_entity = await session_repo.get_by_id(session_id)
+
+                if session_entity and session_entity.claude_session_id:
+                    logger.info(
+                        "clearing_stale_claude_session_id",
+                        session_id=str(session_id),
+                        stale_claude_session_id=session_entity.claude_session_id,
+                    )
+
+                    session_entity.claude_session_id = None
+                    await session_repo.update(session_entity)
+                    await db.commit()
+
+                    logger.info(
+                        "stale_claude_session_id_cleared",
+                        session_id=str(session_id),
+                    )
+        except Exception as e:
+            logger.error(
+                "failed_to_clear_stale_session_id",
+                session_id=str(session_id),
+                error=str(e),
+            )

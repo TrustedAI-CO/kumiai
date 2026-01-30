@@ -28,13 +28,13 @@ class Project:
     pm_agent_id: Optional[str] = (
         None  # Agent ID (string-based, e.g., 'product-manager')
     )
-    pm_session_id: Optional[UUID] = None
+    pm_session_id: Optional[str] = None  # 8-character session ID
     team_member_ids: Optional[List[str]] = None
     path: str = ""
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
-    def assign_pm(self, agent_id: str, session_id: UUID) -> None:
+    def assign_pm(self, agent_id: str, session_id: str) -> None:
         """
         Assign a PM agent and session to this project.
 

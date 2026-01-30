@@ -646,17 +646,19 @@ async def recreate_session(
         executor._queue_manager._processing[session_id] = False
         del executor._queue_manager._processing[session_id]
 
-    # Cancel queue processor task if running
-    if session_id in executor._queue_processors:
-        task = executor._queue_processors[session_id]
+    # NOTE: Queue processors were removed in simplified executor
+    # Execution tasks are now managed via executor._executions instead
+    # Cancel running execution task if present
+    if session_id in executor._executions:
+        task = executor._executions[session_id]
         if not task.done():
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-        del executor._queue_processors[session_id]
-        logger.info("stopped_queue_processor", session_id=str(session_id))
+        del executor._executions[session_id]
+        logger.info("stopped_execution_task", session_id=str(session_id))
 
     # Clear session lock
     if session_id in executor._session_locks:

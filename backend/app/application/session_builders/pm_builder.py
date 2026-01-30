@@ -91,8 +91,12 @@ class PMSessionBuilder(SessionBuilder):
             context={"tools": allowed_tools},
         )
 
-        # Import hook for project_id injection
-        from app.infrastructure.claude.hooks import inject_session_context_hook
+        # Import hooks
+        from app.infrastructure.claude.hooks import (
+            inject_session_context_hook,
+            user_prompt_submit_hook,
+            stop_hook,
+        )
 
         # Build options dictionary
         options_dict = {
@@ -105,12 +109,19 @@ class PMSessionBuilder(SessionBuilder):
             "permission_mode": "bypassPermissions",
             "hooks": {
                 "PreToolUse": [
-                    # Auto-inject project_id for all PM management tools
+                    # Auto-inject project_id and source_instance_id for all PM management tools
                     HookMatcher(
                         matcher=".*pm_management__.*",
                         hooks=[inject_session_context_hook],
-                    )
-                ]
+                    ),
+                    # Also inject for common_tools that need session context
+                    HookMatcher(
+                        matcher=".*common_tools__(contact_instance|get_session_info).*",
+                        hooks=[inject_session_context_hook],
+                    ),
+                ],
+                "UserPromptSubmit": [HookMatcher(hooks=[user_prompt_submit_hook])],
+                "Stop": [HookMatcher(hooks=[stop_hook])],
             },
         }
 

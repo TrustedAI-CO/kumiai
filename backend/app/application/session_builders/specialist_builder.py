@@ -85,6 +85,14 @@ class SpecialistSessionBuilder(SessionBuilder):
             f"System prompt built for {context.agent_id}: {len(system_prompt)} chars"
         )
 
+        # Import hooks for status tracking and context injection
+        from app.infrastructure.claude.hooks import (
+            user_prompt_submit_hook,
+            stop_hook,
+            inject_session_context_hook,
+        )
+        from claude_agent_sdk import HookMatcher
+
         # Build options dictionary
         options_dict = {
             "model": context.model,
@@ -94,6 +102,17 @@ class SpecialistSessionBuilder(SessionBuilder):
             "mcp_servers": mcp_servers,
             "include_partial_messages": True,  # Enable streaming
             "permission_mode": "bypassPermissions",
+            "hooks": {
+                "PreToolUse": [
+                    # Auto-inject project_id and source_instance_id for common_tools
+                    HookMatcher(
+                        matcher=".*common_tools__(contact_instance|get_session_info).*",
+                        hooks=[inject_session_context_hook],
+                    ),
+                ],
+                "UserPromptSubmit": [HookMatcher(hooks=[user_prompt_submit_hook])],
+                "Stop": [HookMatcher(hooks=[stop_hook])],
+            },
         }
 
         # Add resume if present

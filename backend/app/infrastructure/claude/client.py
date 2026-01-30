@@ -43,6 +43,7 @@ class ClaudeClient:
         self._client = ClaudeSDKClient(options=options)
         self._session_id: Optional[str] = None
         self._connected = False
+        self._session_id_ready = asyncio.Event()
 
         logger.info(
             "claude_client_initialized",
@@ -165,6 +166,7 @@ class ClaudeClient:
 
                     if captured_session_id:
                         self._session_id = captured_session_id
+                        self._session_id_ready.set()  # Signal that session_id is available
                         logger.info(
                             "session_id_captured",
                             session_id=captured_session_id,
@@ -252,9 +254,37 @@ class ClaudeClient:
 
     def get_session_id(self) -> Optional[str]:
         """
-        Get the captured Claude session ID.
+        Get the captured Claude session ID (synchronous version).
 
         Returns:
-            Optional[str]: Session ID if captured, None otherwise
+            Optional[str]: Session ID if already captured, None otherwise
         """
         return self._session_id
+
+    async def get_session_id_async(self, timeout: float = 5.0) -> Optional[str]:
+        """
+        Get the captured Claude session ID, waiting for it to be available.
+
+        This method waits up to `timeout` seconds for the session_id to be
+        captured from the first message stream. Use this when you need to
+        ensure the session_id is available.
+
+        Args:
+            timeout: Maximum seconds to wait for session_id (default: 5.0)
+
+        Returns:
+            Optional[str]: Session ID if captured within timeout, None otherwise
+        """
+        if self._session_id:
+            return self._session_id
+
+        try:
+            await asyncio.wait_for(self._session_id_ready.wait(), timeout=timeout)
+            return self._session_id
+        except asyncio.TimeoutError:
+            logger.warning(
+                "session_id_wait_timeout",
+                timeout=timeout,
+                message="Session ID not captured within timeout period",
+            )
+            return None

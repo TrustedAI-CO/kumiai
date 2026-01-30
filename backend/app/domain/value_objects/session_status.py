@@ -6,12 +6,16 @@ from typing import Dict, Set
 
 # State machine transitions mapping (defined outside class to avoid enum member conflict)
 _STATE_TRANSITIONS: Dict[str, Set[str]] = {
-    "initializing": {"working", "error"},
-    "working": {"idle", "error", "done", "interrupted"},
-    "idle": {"working", "error", "done"},
-    "error": {"idle"},  # Can resume from error
+    "initializing": {"working", "error", "cancelled"},
+    "working": {"idle", "error", "done", "interrupted", "cancelled"},
+    "idle": {"working", "error", "done", "cancelled"},
+    "error": {
+        "working",
+        "idle",
+    },  # Can resume from error - Claude SDK handles errors gracefully
     "done": {"working"},  # Can resume from done
-    "interrupted": {"idle"},  # Can resume from interrupted
+    "interrupted": {"idle", "working"},  # Can resume from interrupted
+    "cancelled": set(),  # Terminal state
 }
 
 
@@ -20,12 +24,13 @@ class SessionStatus(str, Enum):
     Session status with state machine transitions.
 
     Valid state transitions enforce business rules:
-    - initializing → working, error
-    - working → idle, error, done, interrupted
-    - idle → working, error, done
-    - error → idle (resume)
+    - initializing → working, error, cancelled
+    - working → idle, error, done, interrupted, cancelled
+    - idle → working, error, done, cancelled
+    - error → working, idle (resume - Claude SDK handles errors gracefully)
     - done → working (resume)
-    - interrupted → idle (resume)
+    - interrupted → idle, working (resume)
+    - cancelled → (terminal)
     """
 
     INITIALIZING = "initializing"
@@ -34,6 +39,7 @@ class SessionStatus(str, Enum):
     ERROR = "error"
     DONE = "done"
     INTERRUPTED = "interrupted"
+    CANCELLED = "cancelled"
 
     @classmethod
     def can_transition(
@@ -53,7 +59,7 @@ class SessionStatus(str, Enum):
             >>> SessionStatus.can_transition(SessionStatus.IDLE, SessionStatus.WORKING)
             True
             >>> SessionStatus.can_transition(SessionStatus.ERROR, SessionStatus.WORKING)
-            False
+            True
         """
         return to_status.value in _STATE_TRANSITIONS.get(from_status.value, set())
 

@@ -166,34 +166,47 @@ async def contact_instance(args: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError as e:
             return _error(f"Invalid UUID format: {e}")
 
-        # Get sender instance info from context
-        from app.infrastructure.mcp.servers.context import get_current_session_info
+        # Get sender instance info from injected parameters
+        # These are auto-injected by the inject_session_context_hook
+        source_instance_id_str = args.get("source_instance_id", "")
+        project_id_str = args.get("project_id", "")
 
-        sender_info = get_current_session_info()
         source_instance_id = None
         project_id = None
 
-        if sender_info:
-            if "source_instance_id" in sender_info:
-                try:
-                    source_instance_id = UUID(sender_info["source_instance_id"])
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"[PM_TOOLS] Invalid source_instance_id format: {sender_info.get('source_instance_id')}"
-                    )
+        # Parse source_instance_id
+        if source_instance_id_str:
+            try:
+                source_instance_id = UUID(source_instance_id_str)
+                logger.debug(
+                    f"[PM_TOOLS] Got source_instance_id from hook injection: {source_instance_id}"
+                )
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"[PM_TOOLS] Invalid source_instance_id format: {source_instance_id_str}, error: {e}"
+                )
 
-            if "project_id" in sender_info:
-                try:
-                    project_id = UUID(sender_info["project_id"])
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"[PM_TOOLS] Invalid project_id format: {sender_info.get('project_id')}"
-                    )
+        # Parse project_id
+        if project_id_str:
+            try:
+                project_id = UUID(project_id_str)
+                logger.debug(
+                    f"[PM_TOOLS] Got project_id from hook injection: {project_id}"
+                )
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"[PM_TOOLS] Invalid project_id format: {project_id_str}, error: {e}"
+                )
 
+        # Validate required parameters
         if not source_instance_id:
-            return _error("Could not determine source instance from context")
+            return _error(
+                "Could not determine source instance. The inject_session_context_hook should have provided this."
+            )
         if not project_id:
-            return _error("Could not determine project from context")
+            return _error(
+                "Could not determine project. The inject_session_context_hook should have provided this."
+            )
 
         logger.info(
             f"[PM_TOOLS] Contact instance: "
@@ -375,9 +388,259 @@ async def list_team_members(args: Dict[str, Any]) -> Dict[str, Any]:
         return _error(f"Failed to list team members: {str(e)}")
 
 
+@tool(
+    "get_project_status",
+    "View all instances and their current stages in the project",
+    {},
+)
+async def get_project_status(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get status of all sessions/instances in the project.
+
+    Args (from args dict):
+        project_id: UUID of the project (auto-injected by hook, not in schema)
+
+    Returns:
+        Dict with content array containing project status overview
+    """
+    try:
+        # Extract and validate project_id
+        project_id_str = args.get("project_id", "")
+        if not project_id_str:
+            return _error("project_id is required (should be auto-injected)")
+
+        try:
+            project_id = UUID(project_id_str)
+        except ValueError:
+            return _error(f"Invalid project_id format: {project_id_str}")
+
+        logger.info(f"[PM_TOOLS] Getting project status for project {project_id}")
+
+        # Query all sessions for this project
+        async with get_repository_session() as db:
+            session_repo = SessionRepositoryImpl(db)
+
+            # Get all sessions for the project
+            from app.infrastructure.database.repositories.project_repository import (
+                ProjectRepositoryImpl,
+            )
+
+            project_repo = ProjectRepositoryImpl(db)
+            project_entity = await project_repo.get_by_id(project_id)
+
+            if not project_entity:
+                return _error(f"Project {project_id} not found")
+
+            # Get all sessions in the project
+            all_sessions = await session_repo.get_by_project_id(project_id)
+
+        # Organize sessions by type and stage
+        pm_sessions = []
+        specialist_sessions = []
+
+        for session in all_sessions:
+            session_info = {
+                "id": str(session.id),
+                "agent_id": session.agent_id or "Unknown",
+                "status": (
+                    session.status.value
+                    if hasattr(session.status, "value")
+                    else str(session.status)
+                ),
+                "stage": (
+                    session.context.get("kanban_stage", "unknown")
+                    if session.context
+                    else "unknown"
+                ),
+                "description": (
+                    session.context.get("description", "No description")
+                    if session.context
+                    else "No description"
+                ),
+            }
+
+            if session.session_type == SessionType.PM:
+                pm_sessions.append(session_info)
+            else:
+                specialist_sessions.append(session_info)
+
+        # Format response
+        result_text = f"**Project Status: {project_entity.name}**\n\n"
+
+        if pm_sessions:
+            result_text += f"**PM Sessions ({len(pm_sessions)}):**\n"
+            for pm in pm_sessions:
+                result_text += (
+                    f"• {pm['agent_id']} (ID: {pm['id']}) - Status: {pm['status']}\n"
+                )
+            result_text += "\n"
+
+        if specialist_sessions:
+            result_text += f"**Specialist Sessions ({len(specialist_sessions)}):**\n"
+            # Group by stage
+            stages = {}
+            for session in specialist_sessions:
+                stage = session["stage"]
+                if stage not in stages:
+                    stages[stage] = []
+                stages[stage].append(session)
+
+            for stage, sessions in sorted(stages.items()):
+                result_text += f"\n**{stage.upper()}:**\n"
+                for session in sessions:
+                    result_text += f"  • {session['agent_id']} (ID: {session['id']}) - {session['status']}\n"
+                    if session["description"]:
+                        result_text += f"    Task: {session['description'][:80]}{'...' if len(session['description']) > 80 else ''}\n"
+        else:
+            result_text += "No specialist sessions yet.\n\nUse `spawn_instance` to create work instances."
+
+        return {
+            "content": [{"type": "text", "text": result_text}],
+            "project_id": str(project_id),
+            "pm_sessions": pm_sessions,
+            "specialist_sessions": specialist_sessions,
+        }
+
+    except Exception as e:
+        logger.error(f"[PM_TOOLS] Error getting project status: {e}", exc_info=True)
+        return _error(f"Failed to get project status: {str(e)}")
+
+
+@tool(
+    "update_instance_stage",
+    "Move an instance through workflow stages (backlog → in_progress → review → done → cancelled)",
+    {
+        "instance_id": str,
+        "new_stage": str,
+        "reason": str,
+    },
+)
+async def update_instance_stage(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update the kanban stage of an instance.
+
+    Args (from args dict):
+        instance_id: UUID of the instance to update
+        new_stage: New stage (backlog, in_progress, review, done, cancelled)
+        reason: Optional reason for the stage change (required for 'cancelled')
+        project_id: UUID of the project (auto-injected by hook, not in schema)
+
+    Returns:
+        Dict with content array containing update confirmation
+    """
+    try:
+        # Extract and validate parameters
+        instance_id_str = args.get("instance_id", "")
+        new_stage = args.get("new_stage", "").lower()
+        reason = args.get("reason", "")
+        project_id_str = args.get("project_id", "")
+
+        if not instance_id_str:
+            return _error("instance_id is required")
+        if not new_stage:
+            return _error("new_stage is required")
+        if not project_id_str:
+            return _error("project_id is required (should be auto-injected)")
+
+        # Validate stage
+        valid_stages = ["backlog", "in_progress", "review", "done", "cancelled"]
+        if new_stage not in valid_stages:
+            return _error(
+                f"Invalid stage '{new_stage}'. Must be one of: {', '.join(valid_stages)}"
+            )
+
+        # Require reason for cancelled stage
+        if new_stage == "cancelled" and not reason:
+            return _error("reason is required when cancelling an instance")
+
+        try:
+            instance_id = UUID(instance_id_str)
+            project_id = UUID(project_id_str)
+        except ValueError as e:
+            return _error(f"Invalid UUID format: {e}")
+
+        logger.info(f"[PM_TOOLS] Updating instance {instance_id} to stage {new_stage}")
+
+        # Update session in database
+        async with get_repository_session() as db:
+            session_repo = SessionRepositoryImpl(db)
+            session_entity = await session_repo.get_by_id(instance_id)
+
+            if not session_entity:
+                return _error(f"Instance {instance_id} not found")
+
+            # Validate instance is in the same project
+            if session_entity.project_id != project_id:
+                return _error(f"Instance {instance_id} is not in project {project_id}")
+
+            # Update the kanban stage in context
+            if not session_entity.context:
+                session_entity.context = {}
+
+            old_stage = session_entity.context.get("kanban_stage", "unknown")
+            old_status = session_entity.status
+            session_entity.context["kanban_stage"] = new_stage
+
+            # Handle special stages that affect session status
+            if new_stage == "cancelled":
+                session_entity.status = SessionStatus.CANCELLED
+                session_entity.context["cancelled_by"] = "pm"
+                session_entity.context["cancellation_reason"] = reason
+                session_entity.context["cancelled_at"] = (
+                    __import__("datetime").datetime.now().isoformat()
+                )
+            elif new_stage == "done":
+                # Mark as done when moved to done
+                if session_entity.status not in [
+                    SessionStatus.DONE,
+                    SessionStatus.CANCELLED,
+                ]:
+                    session_entity.status = SessionStatus.DONE
+            elif new_stage == "in_progress":
+                # Mark as working when moved to in_progress
+                if session_entity.status == SessionStatus.INITIALIZING:
+                    session_entity.status = SessionStatus.WORKING
+
+            # Update in database
+            await session_repo.update(session_entity)
+            await db.commit()
+
+        # Build result message
+        status_changed = old_status != session_entity.status
+        result_text = f"""✓ Instance stage updated successfully!
+
+Instance: {session_entity.agent_id or "Unknown"} (ID: {str(instance_id)[:8]}...)
+Stage: {old_stage} → {new_stage}"""
+
+        if status_changed:
+            result_text += f"\nStatus: {old_status.value if hasattr(old_status, 'value') else str(old_status)} → {session_entity.status.value if hasattr(session_entity.status, 'value') else str(session_entity.status)}"
+
+        if new_stage == "cancelled":
+            result_text += f"\nReason: {reason}"
+
+        result_text += f"\n\nThe instance is now in the '{new_stage}' stage."
+
+        return {
+            "content": [{"type": "text", "text": result_text}],
+            "instance_id": str(instance_id),
+            "old_stage": old_stage,
+            "new_stage": new_stage,
+        }
+
+    except Exception as e:
+        logger.error(f"[PM_TOOLS] Error updating instance stage: {e}", exc_info=True)
+        return _error(f"Failed to update instance stage: {str(e)}")
+
+
 # Create the MCP server with PM management tools
 pm_management_server = create_sdk_mcp_server(
     name="pm_management",
     version="1.0.0",
-    tools=[spawn_instance, contact_instance, list_team_members],
+    tools=[
+        spawn_instance,
+        contact_instance,
+        list_team_members,
+        get_project_status,
+        update_instance_stage,
+    ],
 )

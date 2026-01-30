@@ -150,17 +150,21 @@ async def contact_instance(args: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError:
             return _error(f"Invalid instance_id format: {target_instance_id}")
 
-        # Get sender instance info from context
-        from app.infrastructure.mcp.servers.context import get_current_session_info
-
-        sender_info = get_current_session_info()
+        # Get sender instance info from injected parameters
+        # These are auto-injected by the inject_session_context_hook
+        source_instance_id_str = args.get("source_instance_id", "")
         source_instance_id = None
-        if sender_info and "source_instance_id" in sender_info:
+
+        # Parse source_instance_id
+        if source_instance_id_str:
             try:
-                source_instance_id = UUID(sender_info["source_instance_id"])
-            except (ValueError, TypeError):
+                source_instance_id = UUID(source_instance_id_str)
+                logger.debug(
+                    f"[COMMON_TOOLS] Got source_instance_id from hook injection: {source_instance_id}"
+                )
+            except (ValueError, TypeError) as e:
                 logger.warning(
-                    f"[COMMON_TOOLS] Invalid source_instance_id format: {sender_info.get('source_instance_id')}"
+                    f"[COMMON_TOOLS] Invalid source_instance_id format: {source_instance_id_str}, error: {e}"
                 )
 
         logger.info(
@@ -184,19 +188,17 @@ async def contact_instance(args: Dict[str, Any]) -> Dict[str, Any]:
 
         # Fire-and-forget: Create background task to send message
         # This prevents blocking the current session
-        if source_instance_id:
-            asyncio.create_task(
-                _send_message_background(instance_uuid, message, source_instance_id)
+        if not source_instance_id:
+            logger.error(
+                "[COMMON_TOOLS] No source_instance_id available, cannot send message without attribution"
             )
-        else:
-            logger.warning(
-                "[COMMON_TOOLS] No source_instance_id available, message won't have attribution"
+            return _error(
+                "Could not determine sender instance. The inject_session_context_hook should have provided this."
             )
-            asyncio.create_task(
-                _send_message_background(
-                    instance_uuid, message, UUID("00000000-0000-0000-0000-000000000000")
-                )
-            )
+
+        asyncio.create_task(
+            _send_message_background(instance_uuid, message, source_instance_id)
+        )
 
         logger.info(
             f"[COMMON_TOOLS] Message dispatched to instance {target_instance_id[:8]}"
