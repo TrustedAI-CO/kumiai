@@ -273,6 +273,8 @@ class SessionExecutor:
             # Close database session
             if context and context.get("db_session"):
                 await context["db_session"].close()
+            # Clear session info from global storage
+            await self._clear_session_info(session_id)
             # Cleanup
             await self._cleanup_execution(session_id)
 
@@ -554,6 +556,19 @@ class SessionExecutor:
         except Exception as e:
             logger.warning(
                 "failed_to_set_session_info",
+                extra={"session_id": str(session_id), "error": str(e)},
+            )
+
+    async def _clear_session_info(self, session_id: UUID) -> None:
+        """Clear session info when execution completes."""
+        from app.infrastructure.mcp.servers.context import clear_session_info
+
+        try:
+            clear_session_info(str(session_id))
+            logger.debug("session_info_cleared", extra={"session_id": str(session_id)})
+        except Exception as e:
+            logger.warning(
+                "failed_to_clear_session_info",
                 extra={"session_id": str(session_id), "error": str(e)},
             )
 
