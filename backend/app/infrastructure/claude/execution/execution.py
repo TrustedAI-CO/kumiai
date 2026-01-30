@@ -240,7 +240,7 @@ class Execution:
 
     def _format_message(self, queued_msg: QueuedMessage) -> dict:
         """Format queued message for Claude."""
-        from app.infrastructure.claude.batch_message_processor import (
+        from app.infrastructure.claude.streaming.batch_processor import (
             BatchMessageProcessor,
         )
 
