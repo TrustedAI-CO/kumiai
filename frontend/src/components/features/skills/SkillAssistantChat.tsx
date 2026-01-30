@@ -132,7 +132,7 @@ export function SkillAssistantChat({
             role="skill_assistant"
             onClose={onToggle}
             className="h-full"
-            readOnly={sessionStatus === 'error'}
+            readOnly={false}
             onAutoSave={handleAutoSave}
             onNewSession={handleRecreateSkillAssistant}
             showHeader={false}

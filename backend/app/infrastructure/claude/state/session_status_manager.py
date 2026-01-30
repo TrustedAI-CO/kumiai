@@ -31,6 +31,7 @@ class SessionStatusManager:
     - IDLE/INITIALIZING → WORKING (when processing starts)
     - WORKING → IDLE (when processing completes successfully)
     - WORKING → ERROR (when processing fails)
+    - ERROR → WORKING (when user sends new message to recover)
     - Any status → INTERRUPTED (when user interrupts)
 
     Thread Safety:
@@ -76,6 +77,9 @@ class SessionStatusManager:
             SessionStatus.IDLE: {SessionStatus.WORKING},
             SessionStatus.INITIALIZING: {SessionStatus.WORKING},
             SessionStatus.WORKING: {SessionStatus.IDLE, SessionStatus.ERROR},
+            SessionStatus.ERROR: {
+                SessionStatus.WORKING
+            },  # Allow recovery by sending new message
         }
 
         return to_status in valid_transitions.get(from_status, set())

@@ -189,7 +189,7 @@ export function PMChat({ isOpen, onToggle, projectId, projectPath, projectName, 
             instanceId={pmInstanceId}
             role="pm"
             className="h-full"
-            readOnly={sessionStatus === 'error'}
+            readOnly={false}
             showHeader={false}
             userAvatar={profile?.avatar || undefined}
             onClose={onToggle}
