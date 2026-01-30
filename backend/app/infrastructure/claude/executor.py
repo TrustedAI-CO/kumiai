@@ -106,6 +106,9 @@ class SessionExecutor:
         )
 
         try:
+            # Get claude_session_id before interrupting (so we can save it)
+            claude_session_id = await self.get_claude_session_id(session_id)
+
             # Interrupt Claude client
             await self._interrupt_claude_client(session_id)
 
@@ -113,20 +116,33 @@ class SessionExecutor:
             await self._queue_manager.clear_queue(session_id)
 
             # Cancel execution task if running
+            # IMPORTANT: Release lock before awaiting to avoid deadlock
+            # (task cleanup needs same lock)
             lock = self._get_or_create_lock(session_id)
+            task = None
             async with lock:
                 if session_id in self._executions:
                     task = self._executions[session_id]
                     if not task.done():
                         task.cancel()
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass
                     del self._executions[session_id]
 
-            # Update status
-            await self._update_session_status_after_execution(session_id, None)
+            # Wait for task to complete OUTSIDE lock to avoid deadlock
+            if task:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            # Update status to INTERRUPTED
+            await self._session_status_manager.update_to_interrupted(session_id)
+
+            # Save claude_session_id if captured
+            if claude_session_id:
+                await self._save_claude_session_id(session_id, claude_session_id)
+
+            # Broadcast updated queue status (should be 0 after clear)
+            await self._broadcast_queue_status(session_id)
 
             logger.info(
                 "interrupt_session_completed", extra={"session_id": str(session_id)}
@@ -153,7 +169,8 @@ class SessionExecutor:
         """Get Claude session ID for resume."""
         try:
             client = await self._client_manager.get_client(session_id)
-            return client.get_session_id()
+            # Wait for session_id to be captured (with 5 second timeout)
+            return await client.get_session_id_async(timeout=5.0)
         except ClientNotFoundError:
             return await self._get_claude_session_id_from_db(session_id)
 
@@ -218,6 +235,21 @@ class SessionExecutor:
                 on_queue_change=lambda: self._broadcast_queue_status(session_id),
             )
 
+            # Register execution for hooks (pending - will be moved to main registry on first hook)
+            from app.infrastructure.claude.hooks import register_pending_execution
+
+            # Extract project_id and source_instance_id from session entity
+            project_id = (
+                str(context["session_entity"].project_id)
+                if context["session_entity"].project_id
+                else None
+            )
+            source_instance_id = str(session_id)  # Use session_id as source_instance_id
+
+            register_pending_execution(
+                str(session_id), execution, project_id, source_instance_id
+            )
+
             # Run and broadcast events
             async for event in execution.run():
                 # Save messages to database at transitions (reuse same db session)
@@ -253,23 +285,46 @@ class SessionExecutor:
             await self._update_session_status_after_execution(session_id, None)
 
         except Exception as e:
-            logger.error(
-                "execution_failed",
-                extra={
-                    "session_id": str(session_id),
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            # Rollback on error
-            if context and context.get("db_session"):
-                await context["db_session"].rollback()
-            # Update status to ERROR
-            await self._update_session_status_after_execution(session_id, e)
-            raise
+            # Check if this is a SIGINT (Ctrl+C / exit code -2) - treat as graceful shutdown
+            error_msg = str(e)
+            is_sigint = "exit code -2" in error_msg or "SIGINT" in error_msg
+
+            if is_sigint:
+                logger.warning(
+                    "execution_interrupted_by_signal",
+                    extra={
+                        "session_id": str(session_id),
+                        "signal": "SIGINT (Ctrl+C)",
+                    },
+                )
+                # Rollback and set to IDLE (not ERROR) for graceful interruption
+                if context and context.get("db_session"):
+                    await context["db_session"].rollback()
+                # Don't update status - it may already be IDLE from Stop hook
+                # await self._update_session_status_after_execution(session_id, None)
+            else:
+                logger.error(
+                    "execution_failed",
+                    extra={
+                        "session_id": str(session_id),
+                        "error": error_msg,
+                        "error_type": type(e).__name__,
+                    },
+                    exc_info=True,
+                )
+                # Rollback on error
+                if context and context.get("db_session"):
+                    await context["db_session"].rollback()
+                # Update status to ERROR
+                await self._update_session_status_after_execution(session_id, e)
+                raise
 
         finally:
+            # Unregister execution from hooks
+            from app.infrastructure.claude.hooks import unregister_execution
+
+            unregister_execution(str(session_id))
+
             # Close database session
             if context and context.get("db_session"):
                 await context["db_session"].close()
@@ -418,9 +473,16 @@ class SessionExecutor:
         self, session_id: UUID, error: Optional[Exception]
     ) -> None:
         """Update status after execution."""
-        claude_session_id = None
-        if not error:
-            claude_session_id = await self.get_claude_session_id(session_id)
+        # Always try to get claude_session_id, even if execution failed
+        # This ensures we capture session IDs for resume even on errors
+        claude_session_id = await self.get_claude_session_id(session_id)
+
+        logger.info(
+            "updating_session_status_after_execution",
+            session_id=str(session_id),
+            claude_session_id=claude_session_id,
+            has_error=bool(error),
+        )
 
         await self._session_status_manager.update_after_execution(
             session_id, error, claude_session_id
@@ -441,6 +503,38 @@ class SessionExecutor:
                 "failed_to_get_claude_session_id_from_db", extra={"error": str(e)}
             )
             return None
+
+    async def _save_claude_session_id(
+        self, session_id: UUID, claude_session_id: str
+    ) -> None:
+        """Save Claude session ID to database."""
+        from app.infrastructure.database.connection import get_repository_session
+        from app.infrastructure.database.repositories import SessionRepositoryImpl
+
+        try:
+            async with get_repository_session() as db:
+                session_repo = SessionRepositoryImpl(db)
+                session_entity = await session_repo.get_by_id(session_id)
+                if session_entity:
+                    session_entity.claude_session_id = claude_session_id
+                    await session_repo.update(session_entity)
+                    await db.commit()
+                    logger.info(
+                        "claude_session_id_saved",
+                        extra={
+                            "session_id": str(session_id),
+                            "claude_session_id": claude_session_id,
+                        },
+                    )
+        except Exception as e:
+            logger.error(
+                "failed_to_save_claude_session_id",
+                extra={
+                    "session_id": str(session_id),
+                    "claude_session_id": claude_session_id,
+                    "error": str(e),
+                },
+            )
 
     async def _save_assistant_message(
         self,

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional
-from uuid import UUID
+from uuid import UUID  # Keep for message.id
 
 from app.core.exceptions import ValidationError
 from app.domain.value_objects import MessageRole
@@ -22,10 +22,11 @@ class Message:
     - Tool result messages must have tool_use_id
     - Sequence must be non-negative
     - Sequence must be unique within session (enforced by repository)
+    - Session IDs are 8-character hex strings
     """
 
-    id: UUID
-    session_id: UUID
+    id: UUID  # Message ID still uses UUID
+    session_id: str  # 8-character session ID
     role: MessageRole
     content: str
     tool_use_id: Optional[str] = None
@@ -36,8 +37,8 @@ class Message:
     # Sender attribution fields for message rendering
     agent_id: Optional[str] = None  # Source of truth for which agent sent the message
     agent_name: Optional[str] = None  # Display name of the sending agent
-    from_instance_id: Optional[UUID] = (
-        None  # Session ID where message originated (for cross-session routing)
+    from_instance_id: Optional[str] = (
+        None  # 8-character session ID where message originated
     )
 
     # Response grouping for UI

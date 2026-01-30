@@ -94,6 +94,11 @@ class SessionStatusManager:
                     session_repo = SessionRepositoryImpl(db)
                     session_entity = await session_repo.get_by_id(session_id)
                     if session_entity:
+                        # Clear error_message if recovering from ERROR state
+                        # This prevents frontend from showing stale error banner
+                        if session_entity.status == SessionStatus.ERROR:
+                            session_entity.error_message = None
+
                         session_entity.status = SessionStatus.WORKING
                         session_entity.sync_kanban_stage()
                         await session_repo.update(session_entity)

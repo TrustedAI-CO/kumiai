@@ -83,8 +83,7 @@ class Execution:
         # Save and broadcast user message
         await self._save_and_broadcast_user_message(first_msg)
 
-        # Mark as processing when we send the first message
-        self.is_processing = True
+        # Note: is_processing is set by UserPromptSubmit hook (no manual setting needed)
 
         yield self._format_message(first_msg)
         self.queue.task_done()
@@ -128,8 +127,7 @@ class Execution:
             # Save and broadcast user message
             await self._save_and_broadcast_user_message(msg)
 
-            # Mark as processing when we send any message
-            self.is_processing = True
+            # Note: is_processing is set by UserPromptSubmit hook (no manual setting needed)
 
             yield self._format_message(msg)
             self.queue.task_done()
@@ -159,7 +157,16 @@ class Execution:
         agent_id = self.session_entity.agent_id
         agent_name = agent_id.replace("-", " ").title() if agent_id else None
 
+        # Track if we've saved claude_session_id yet
+        claude_session_id_saved = False
+
         async for message in self.client.receive_messages():
+            # Save claude_session_id as soon as it's captured (first message)
+            if not claude_session_id_saved:
+                captured_id = self.client.get_session_id()
+                if captured_id:
+                    await self._save_claude_session_id_immediately(captured_id)
+                    claude_session_id_saved = True
             events = convert_message_to_events(
                 message, str(self.session_id), response_id, agent_id, agent_name
             )
@@ -194,14 +201,14 @@ class Execution:
                     ):
                         yield flushed
 
-                    # Clear processing flag when response completes
-                    # MessageCompleteEvent means Claude finished this turn
+                    # Note: is_processing is cleared by Stop hook (no manual clearing needed)
+                    # Just set has_more_messages based on current state
                     if isinstance(event, MessageCompleteEvent):
-                        self.is_processing = False
                         queue_size = self.queue.qsize()
 
-                        # Set has_more based on queue
-                        event.has_more_messages = queue_size > 0
+                        # Set has_more based on is_processing OR queue
+                        # is_processing is managed by hooks (UserPromptSubmit/Stop)
+                        event.has_more_messages = self.is_processing or queue_size > 0
 
                         logger.info(
                             "message_complete_from_claude",
@@ -243,6 +250,44 @@ class Execution:
             "message": {"role": "user", "content": content},
             "parent_tool_use_id": None,
         }
+
+    async def _save_claude_session_id_immediately(self, claude_session_id: str) -> None:
+        """
+        Save claude_session_id to database immediately when captured.
+
+        This ensures we can resume sessions even if the execution doesn't complete
+        normally (e.g., interrupted, server restart, etc.).
+        """
+        try:
+            from app.infrastructure.database.connection import get_repository_session
+            from app.infrastructure.database.repositories import SessionRepositoryImpl
+
+            async with get_repository_session() as db:
+                session_repo = SessionRepositoryImpl(db)
+                session_entity = await session_repo.get_by_id(self.session_id)
+
+                if session_entity:
+                    session_entity.claude_session_id = claude_session_id
+                    await session_repo.update(session_entity)
+                    await db.commit()
+
+                    logger.info(
+                        "claude_session_id_saved_immediately",
+                        session_id=str(self.session_id),
+                        claude_session_id=claude_session_id,
+                    )
+                else:
+                    logger.warning(
+                        "session_not_found_for_claude_id_save",
+                        session_id=str(self.session_id),
+                    )
+        except Exception as e:
+            logger.error(
+                "failed_to_save_claude_session_id_immediately",
+                session_id=str(self.session_id),
+                claude_session_id=claude_session_id,
+                error=str(e),
+            )
 
     async def _save_and_broadcast_user_message(self, queued_msg: QueuedMessage) -> None:
         """Save user message to database and broadcast via SSE."""
