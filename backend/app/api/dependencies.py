@@ -23,9 +23,9 @@ from app.infrastructure.database.repositories import (
 )
 from app.infrastructure.filesystem import FileBasedSkillRepository, FileService
 from app.infrastructure.filesystem.agent_repository import FileBasedAgentRepository
-from app.infrastructure.claude.client_manager import ClaudeClientManager
+from app.infrastructure.claude.core.client_manager import ClaudeClientManager
 from app.infrastructure.claude.config import ClaudeSettings
-from app.infrastructure.claude.executor import SessionExecutor
+from app.infrastructure.claude.execution.executor import SessionExecutor
 from app.infrastructure.sse.manager import SSEManager, sse_manager
 
 # Singleton instances (stateless, thread-safe)

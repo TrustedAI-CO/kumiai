@@ -6,7 +6,7 @@ import json
 
 from claude_agent_sdk import types
 
-from app.infrastructure.claude.events import (
+from app.infrastructure.claude.streaming.events import (
     StreamDeltaEvent,
     ToolUseEvent,
     ToolCompleteEvent,

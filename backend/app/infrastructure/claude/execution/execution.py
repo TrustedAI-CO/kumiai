@@ -10,8 +10,8 @@ from uuid import UUID
 
 from app.core.logging import get_logger
 from app.infrastructure.claude.types import QueuedMessage
-from app.infrastructure.claude.message_converter import convert_message_to_events
-from app.infrastructure.claude.events import MessageCompleteEvent
+from app.infrastructure.claude.streaming.converter import convert_message_to_events
+from app.infrastructure.claude.streaming.events import MessageCompleteEvent
 
 logger = get_logger(__name__)
 

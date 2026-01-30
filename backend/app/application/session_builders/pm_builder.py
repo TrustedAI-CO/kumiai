@@ -92,7 +92,7 @@ class PMSessionBuilder(SessionBuilder):
         )
 
         # Import hooks
-        from app.infrastructure.claude.hooks import (
+        from app.infrastructure.claude.execution.hooks import (
             inject_session_context_hook,
             user_prompt_submit_hook,
             stop_hook,

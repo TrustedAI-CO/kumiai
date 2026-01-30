@@ -4,7 +4,10 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 from app.core.logging import get_logger
-from app.infrastructure.claude.events import ContentBlockEvent, StreamDeltaEvent
+from app.infrastructure.claude.streaming.events import (
+    ContentBlockEvent,
+    StreamDeltaEvent,
+)
 
 logger = get_logger(__name__)
 

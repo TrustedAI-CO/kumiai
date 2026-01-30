@@ -114,7 +114,7 @@ class AssistantSessionBuilder(SessionBuilder):
         )
 
         # Import hooks for status tracking and context injection
-        from app.infrastructure.claude.hooks import (
+        from app.infrastructure.claude.execution.hooks import (
             user_prompt_submit_hook,
             stop_hook,
             inject_session_context_hook,

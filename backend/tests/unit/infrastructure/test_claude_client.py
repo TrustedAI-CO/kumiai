@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions
 
-from app.infrastructure.claude.client import ClaudeClient
+from app.infrastructure.claude.core.client import ClaudeClient
 from app.infrastructure.claude.exceptions import (
     ClaudeConnectionError,
     ClaudeExecutionError,
