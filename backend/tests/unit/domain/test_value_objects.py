@@ -98,13 +98,15 @@ class TestSessionStatus:
         assert SessionStatus.WORKING in next_states
         assert SessionStatus.ERROR in next_states
         assert SessionStatus.INITIALIZING not in next_states
-        assert len(next_states) == 2
+        # Domain allows IDLE → {WORKING, ERROR, DONE, CANCELLED}
+        assert len(next_states) == 4
 
-        # Error state can resume to idle
+        # Error state can resume to idle or recover to working
         error_status = SessionStatus.ERROR
         error_next = error_status.get_valid_next_states()
         assert SessionStatus.IDLE in error_next
-        assert len(error_next) == 1
+        assert SessionStatus.WORKING in error_next
+        assert len(error_next) == 2
 
 
 class TestSessionType:
