@@ -190,7 +190,7 @@ class TestSessionServiceList:
                 agent_id="test-agent",
                 project_id=None,
                 session_type=SessionType.ASSISTANT,
-                status=SessionStatus.THINKING,
+                status=SessionStatus.WORKING,
             ),
         ]
         session_service._session_repo.get_active_sessions.return_value = sessions
@@ -230,15 +230,15 @@ class TestSessionServiceList:
                 agent_id="test-agent",
                 project_id=None,
                 session_type=SessionType.SPECIALIST,
-                status=SessionStatus.COMPLETED,
+                status=SessionStatus.DONE,
             ),
         ]
         session_service._session_repo.get_by_status.return_value = sessions
 
-        result = await session_service.list_sessions(status="completed")
+        result = await session_service.list_sessions(status="done")
 
         assert len(result) == 1
-        assert result[0].status == "completed"
+        assert result[0].status == "done"
         session_service._session_repo.get_by_status.assert_called_once()
 
 
@@ -260,7 +260,7 @@ class TestSessionServiceLifecycle:
 
         result = await session_service.start_session(session_id)
 
-        assert result.status == "thinking"
+        assert result.status == "working"
         session_service._session_repo.update.assert_called_once()
 
     async def test_start_session_not_found(self, session_service):
@@ -279,7 +279,7 @@ class TestSessionServiceLifecycle:
             agent_id="test-agent",
             project_id=None,
             session_type=SessionType.SPECIALIST,
-            status=SessionStatus.COMPLETED,  # Can't start from completed
+            status=SessionStatus.ERROR,  # Can't start from error without resuming
         )
         session_service._session_repo.get_by_id.return_value = session
 
@@ -301,7 +301,7 @@ class TestSessionServiceLifecycle:
 
         result = await session_service.complete_session(session_id)
 
-        assert result.status == "completed"
+        assert result.status == "done"
         session_service._session_repo.update.assert_called_once()
 
     async def test_fail_session_success(self, session_service):
@@ -313,7 +313,7 @@ class TestSessionServiceLifecycle:
             agent_id="test-agent",
             project_id=None,
             session_type=SessionType.SPECIALIST,
-            status=SessionStatus.THINKING,
+            status=SessionStatus.WORKING,
         )
         session_service._session_repo.get_by_id.return_value = session
         session_service._session_repo.update.return_value = session
@@ -358,14 +358,14 @@ class TestSessionServiceLifecycle:
             await session_service.interrupt_session(session_id)
 
     async def test_resume_session_success(self, session_service):
-        """Test resuming a completed session."""
+        """Test resuming an interrupted session."""
         session_id = uuid4()
         session = Session(
             id=session_id,
             agent_id="test-agent",
             project_id=None,
             session_type=SessionType.SPECIALIST,
-            status=SessionStatus.COMPLETED,
+            status=SessionStatus.INTERRUPTED,
         )
         session_service._session_repo.get_by_id.return_value = session
         session_service._session_repo.update.return_value = session
@@ -403,7 +403,7 @@ class TestSessionServiceLifecycle:
             agent_id="test-agent",
             project_id=None,
             session_type=SessionType.SPECIALIST,
-            status=SessionStatus.THINKING,  # Can't resume active session
+            status=SessionStatus.WORKING,  # Can't resume working session
         )
         session_service._session_repo.get_by_id.return_value = session
 
