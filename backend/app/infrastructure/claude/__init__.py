@@ -4,12 +4,12 @@ Claude SDK infrastructure module.
 Provides Claude SDK client management and integration.
 """
 
-from app.infrastructure.claude.client import ClaudeClient
-from app.infrastructure.claude.client_manager import ClaudeClientManager
+from app.infrastructure.claude.core.client import ClaudeClient
+from app.infrastructure.claude.core.client_manager import ClaudeClientManager
 from app.infrastructure.claude.config import ClaudeSettings
-from app.infrastructure.claude.executor import SessionExecutor
-from app.infrastructure.claude.message_converter import convert_message_to_events
-from app.infrastructure.claude.events import (
+from app.infrastructure.claude.execution.executor import SessionExecutor
+from app.infrastructure.claude.streaming.converter import convert_message_to_events
+from app.infrastructure.claude.streaming.events import (
     StreamDeltaEvent,
     ToolUseEvent,
     ToolCompleteEvent,

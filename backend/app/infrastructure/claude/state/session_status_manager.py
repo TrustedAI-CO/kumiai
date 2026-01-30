@@ -14,7 +14,7 @@ from app.core.logging import get_logger
 from app.domain.value_objects import SessionStatus
 from app.infrastructure.database.connection import get_repository_session
 from app.infrastructure.database.repositories import SessionRepositoryImpl
-from app.infrastructure.claude.events import SessionStatusEvent
+from app.infrastructure.claude.streaming.events import SessionStatusEvent
 from app.infrastructure.sse.manager import sse_manager
 
 logger = get_logger(__name__)

@@ -444,7 +444,7 @@ async def user_prompt_submit_hook(
         )
 
         # Update session status in database and broadcast
-        from app.infrastructure.claude.session_status_manager import (
+        from app.infrastructure.claude.state.session_status_manager import (
             session_status_manager,
         )
 
@@ -480,7 +480,7 @@ async def stop_hook(
             )
 
             # Update session status in database and broadcast
-            from app.infrastructure.claude.session_status_manager import (
+            from app.infrastructure.claude.state.session_status_manager import (
                 session_status_manager,
             )
 

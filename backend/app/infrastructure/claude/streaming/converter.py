@@ -6,7 +6,7 @@ import json
 
 from claude_agent_sdk import types
 
-from app.infrastructure.claude.events import (
+from app.infrastructure.claude.streaming.events import (
     StreamDeltaEvent,
     ToolUseEvent,
     ToolCompleteEvent,
@@ -203,7 +203,7 @@ def _extract_stream_events(
     elif event_type == "content_block_stop":
         # This signals end of a content block (text or tool)
         # Create a marker event to trigger executor buffer flush for this specific index
-        from app.infrastructure.claude.events import ContentBlockStopEvent
+        from app.infrastructure.claude.streaming.events import ContentBlockStopEvent
 
         events.append(
             ContentBlockStopEvent(session_id=session_id, content_index=content_index)

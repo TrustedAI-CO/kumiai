@@ -13,16 +13,16 @@ from uuid import UUID
 import asyncio
 
 from app.core.logging import get_logger
-from app.infrastructure.claude.client_manager import ClaudeClientManager
+from app.infrastructure.claude.core.client_manager import ClaudeClientManager
 from app.infrastructure.claude.exceptions import (
     ClaudeExecutionError,
     ClientNotFoundError,
 )
 from app.infrastructure.claude.types import QueuedMessage
-from app.infrastructure.claude.queue_processor import MessageQueueProcessor
-from app.infrastructure.claude.session_status_manager import SessionStatusManager
-from app.infrastructure.claude.message_persistence import MessagePersistence
-from app.infrastructure.claude.execution import Execution
+from app.infrastructure.claude.execution.queue_processor import MessageQueueProcessor
+from app.infrastructure.claude.state.session_status_manager import SessionStatusManager
+from app.infrastructure.claude.streaming.persistence import MessagePersistence
+from app.infrastructure.claude.execution.execution import Execution
 
 logger = get_logger(__name__)
 
@@ -236,7 +236,9 @@ class SessionExecutor:
             )
 
             # Register execution for hooks (pending - will be moved to main registry on first hook)
-            from app.infrastructure.claude.hooks import register_pending_execution
+            from app.infrastructure.claude.execution.hooks import (
+                register_pending_execution,
+            )
 
             # Extract project_id and source_instance_id from session entity
             project_id = (
@@ -321,7 +323,7 @@ class SessionExecutor:
 
         finally:
             # Unregister execution from hooks
-            from app.infrastructure.claude.hooks import unregister_execution
+            from app.infrastructure.claude.execution.hooks import unregister_execution
 
             unregister_execution(str(session_id))
 
@@ -654,7 +656,7 @@ class SessionExecutor:
     async def _broadcast_queue_status(self, session_id: UUID) -> None:
         """Broadcast queue status to SSE."""
         from app.infrastructure.sse.manager import sse_manager
-        from app.infrastructure.claude.events import (
+        from app.infrastructure.claude.streaming.events import (
             QueueStatusEvent,
             QueuedMessagePreview,
         )
