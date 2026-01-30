@@ -45,12 +45,15 @@ class TestSessionStatus:
         )
 
     def test_valid_transitions_from_error(self):
-        """Test valid transitions from error state (resume)."""
-        assert SessionStatus.can_transition(SessionStatus.ERROR, SessionStatus.IDLE)
-        # Invalid transitions
-        assert not SessionStatus.can_transition(
+        """Test valid transitions from error state (recovery and resume)."""
+        # Valid transitions
+        assert SessionStatus.can_transition(
             SessionStatus.ERROR, SessionStatus.WORKING
-        )
+        )  # Recovery by sending new message
+        assert SessionStatus.can_transition(
+            SessionStatus.ERROR, SessionStatus.IDLE
+        )  # Resume to idle
+        # Invalid transitions
         assert not SessionStatus.can_transition(
             SessionStatus.ERROR, SessionStatus.INITIALIZING
         )
