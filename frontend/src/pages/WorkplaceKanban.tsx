@@ -456,17 +456,13 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
           currentProjectId={selectedProject?.id}
           reloadTrigger={projectsReloadTrigger}
           onSelectProject={handleProjectSelection}
-          onOpenProject={handleProjectSelection}
           onCreateProject={() => setShowCreateProjectDialog(true)}
-          onEditProject={(project) => setEditingProject(project)}
           onDeleteProject={(projectId) => {
             const project = projects.find(p => p.id === projectId);
             if (project) {
               handleDeleteProject(projectId, project.name);
             }
           }}
-          onUnarchiveProject={() => {}} // Not used in WorkplaceKanban
-          onPermanentDeleteProject={() => {}} // Not used in WorkplaceKanban
         />
       }
       leftSidebarFooter={<SidebarFooter />}
