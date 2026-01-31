@@ -87,7 +87,6 @@ frontend/dist/
 
 # Runtime Data / Sessions
 .sessions/
-projects/
 
 # Claude and Project files
 .claude/
