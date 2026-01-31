@@ -45,10 +45,6 @@ source venv/bin/activate  # macOS/Linux
 
 pip install -r requirements.txt
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env and set your ANTHROPIC_API_KEY
-
 # Start server (database auto-creates on first run)
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 7892
 
