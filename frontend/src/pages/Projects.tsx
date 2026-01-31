@@ -360,7 +360,7 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
         )}
 
         {!loading && filteredProjects.length > 0 && (
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-2">
             {filteredProjects.map((project) => {
               const runningCount = allSessions.filter(
                 s => s.project_id === project.id && s.status === 'working'
@@ -370,17 +370,11 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  isSelected={currentProjectId === project.id}
                   agents={agents}
+                  isSelected={currentProjectId === project.id}
                   runningSessionsCount={runningCount}
-                  onSelect={() => {
-                    selectProject(project.id);
-                  }}
-                  onEdit={() => setEditingProject(project)}
+                  onClick={() => selectProject(project.id)}
                   onDelete={() => handleDeleteProject(project.id)}
-                  onUnarchive={() => handleUnarchiveProject(project.id)}
-                  onPermanentDelete={() => handlePermanentlyDeleteProject(project.id)}
-                  onOpen={() => handleOpenProject(project.id)}
                 />
               );
             })}
