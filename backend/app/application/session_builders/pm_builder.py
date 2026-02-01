@@ -64,6 +64,10 @@ class PMSessionBuilder(SessionBuilder):
                 skill_descriptions,
             ) = await self._load_agent_content(context.agent_id, working_dir)
 
+        # Add "Skill" to enable SDK auto-discovery of skills in .claude/skills/
+        if "Skill" not in base_tools:
+            base_tools.append("Skill")
+
         # PM always gets pm_management MCP
         pm_mcps = ["pm_management"]
         all_mcps = pm_mcps + agent_mcps
