@@ -129,6 +129,7 @@ class AssistantSessionBuilder(SessionBuilder):
             "system_prompt": system_prompt,
             "allowed_tools": allowed_tools,
             "mcp_servers": mcp_servers,
+            "setting_sources": ["user", "project"],  # Load skills from filesystem
             "include_partial_messages": True,  # Enable streaming
             "permission_mode": "bypassPermissions",
             "hooks": {
