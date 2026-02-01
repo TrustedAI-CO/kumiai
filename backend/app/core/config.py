@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         default=3600, description="Connection recycle time in seconds"
     )
 
+    # Health Check Settings
+    health_pool_warning_threshold: int = Field(
+        default=80, description="Pool utilization % threshold for warning"
+    )
+    health_sse_warning_threshold: int = Field(
+        default=50, description="SSE connection count threshold for warning"
+    )
+
     # Paths
     kumiai_home: Path = Field(
         default_factory=lambda: Path.home() / ".kumiai",

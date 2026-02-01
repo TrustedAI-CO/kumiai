@@ -26,12 +26,13 @@ class EventIdCache {
   }
 
   add(eventId: string): void {
-    // If at max size, remove oldest entry (first in Map)
-    if (this.cache.size >= this.maxSize) {
+    // If already exists, delete and re-add to move to end (true LRU)
+    if (this.cache.has(eventId)) {
+      this.cache.delete(eventId);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove oldest entry (first in Map)
       const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
-      }
+      this.cache.delete(firstKey);
     }
     this.cache.set(eventId, true);
   }

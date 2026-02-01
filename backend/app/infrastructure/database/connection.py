@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 
@@ -42,14 +43,12 @@ def get_engine() -> AsyncEngine:
 
         if is_sqlite:
             # SQLite-specific configuration for better concurrency
+            # Uses StaticPool to maintain a single connection (SQLite limitation)
+            # WAL mode enables concurrent reads, single writer
             _engine = create_async_engine(
                 database_url,
                 echo=False,
-                pool_size=20,  # Increased from default 5 to prevent pool exhaustion
-                max_overflow=10,  # Allow extra connections during spikes
-                pool_timeout=30,  # Wait 30s for available connection
-                pool_recycle=3600,  # Recycle connections after 1 hour
-                pool_pre_ping=True,  # Verify connections before use
+                poolclass=StaticPool,  # Single persistent connection for SQLite
                 connect_args={
                     "check_same_thread": False,  # Required for SQLite with async
                     "timeout": 30,  # Wait up to 30 seconds for locks
@@ -66,14 +65,15 @@ def get_engine() -> AsyncEngine:
 
         else:
             # PostgreSQL or other database configuration
+            # Uses increased pool settings to prevent exhaustion
             _engine = create_async_engine(
                 database_url,
                 echo=False,
-                pool_size=settings.db_pool_size,
-                max_overflow=settings.db_max_overflow,
-                pool_timeout=settings.db_pool_timeout,
-                pool_recycle=settings.db_pool_recycle,
-                pool_pre_ping=True,
+                pool_size=20,  # Increased from default 5 to prevent pool exhaustion
+                max_overflow=10,  # Allow extra connections during spikes
+                pool_timeout=30,  # Wait 30s for available connection
+                pool_recycle=3600,  # Recycle connections after 1 hour
+                pool_pre_ping=True,  # Verify connections before use
             )
     return _engine
 

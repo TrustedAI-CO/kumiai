@@ -104,11 +104,9 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // Page is hidden/backgrounded - stop polling
-        console.log('[Projects] Page hidden, stopping polling');
         stopPolling();
       } else {
         // Page is visible - resume polling
-        console.log('[Projects] Page visible, starting polling');
         startPolling();
       }
     };

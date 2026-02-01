@@ -242,10 +242,10 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log('[WorkplaceKanban] Page hidden, stopping polling');
+        // Page is hidden/backgrounded - stop polling
         stopPolling();
       } else {
-        console.log('[WorkplaceKanban] Page visible, starting polling');
+        // Page is visible - resume polling
         startPolling();
       }
     };

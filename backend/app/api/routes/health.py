@@ -101,9 +101,11 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
             pool_status["utilization_percent"] = round(utilization, 2)
 
             # Warn if pool utilization is high
-            if utilization > 80:
+            if utilization > settings.health_pool_warning_threshold:
                 pool_status["status"] = "warning"
-                pool_status["message"] = "Pool utilization above 80%"
+                pool_status["message"] = (
+                    f"Pool utilization above {settings.health_pool_warning_threshold}%"
+                )
                 health_status["status"] = "degraded"
 
         health_status["checks"]["connection_pool"] = pool_status
@@ -126,7 +128,7 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
         }
 
         # Warn if too many connections (potential leak)
-        if total_sse_connections > 50:
+        if total_sse_connections > settings.health_sse_warning_threshold:
             sse_status["status"] = "warning"
             sse_status["message"] = (
                 f"High number of SSE connections: {total_sse_connections}"
