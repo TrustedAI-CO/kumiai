@@ -208,19 +208,60 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     });
 
     // Poll for task updates - filter by current project to avoid mixing PM sessions
-    const interval = setInterval(() => {
-      if (currentProjectId) {
-        api.getSessions(currentProjectId).then(sessions => {
-          setAgentInstances(sessions);
-        });
-      } else {
-        api.getSessions().then(sessions => {
-          setAgentInstances(sessions);
-        });
-      }
-    }, 10000);
+    // Uses Page Visibility API to pause polling when tab is backgrounded
+    let interval: NodeJS.Timeout | null = null;
 
-    return () => clearInterval(interval);
+    const startPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+
+      interval = setInterval(() => {
+        if (currentProjectId) {
+          api.getSessions(currentProjectId).then(sessions => {
+            setAgentInstances(sessions);
+          }).catch(error => {
+            console.error('[WorkplaceKanban] Failed to poll sessions:', error);
+          });
+        } else {
+          api.getSessions().then(sessions => {
+            setAgentInstances(sessions);
+          }).catch(error => {
+            console.error('[WorkplaceKanban] Failed to poll sessions:', error);
+          });
+        }
+      }, 10000);
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('[WorkplaceKanban] Page hidden, stopping polling');
+        stopPolling();
+      } else {
+        console.log('[WorkplaceKanban] Page visible, starting polling');
+        startPolling();
+      }
+    };
+
+    // Start polling if page is visible
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [currentProjectId]);
 
   // Update selectedProject when currentProjectId prop changes

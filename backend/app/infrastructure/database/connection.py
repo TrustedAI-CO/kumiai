@@ -45,6 +45,11 @@ def get_engine() -> AsyncEngine:
             _engine = create_async_engine(
                 database_url,
                 echo=False,
+                pool_size=20,  # Increased from default 5 to prevent pool exhaustion
+                max_overflow=10,  # Allow extra connections during spikes
+                pool_timeout=30,  # Wait 30s for available connection
+                pool_recycle=3600,  # Recycle connections after 1 hour
+                pool_pre_ping=True,  # Verify connections before use
                 connect_args={
                     "check_same_thread": False,  # Required for SQLite with async
                     "timeout": 30,  # Wait up to 30 seconds for locks
