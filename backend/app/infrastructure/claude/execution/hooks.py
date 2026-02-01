@@ -463,15 +463,26 @@ async def ask_user_question_post_hook(
 
     Interrupts execution so user can answer the questions.
     """
+    logger.info(
+        f"[ASK_USER_HOOK] Called with hook_event: {input_data.get('hook_event_name')}, "
+        f"tool_name: {input_data.get('tool_name')}"
+    )
+
     if input_data.get("hook_event_name") != "PostToolUse":
+        logger.debug("[ASK_USER_HOOK] Skipping - not PostToolUse event")
         return {}
 
     tool_name = input_data.get("tool_name")
     if tool_name != "askuserquestion":
+        logger.debug(
+            f"[ASK_USER_HOOK] Skipping - tool is {tool_name}, not askuserquestion"
+        )
         return {}
 
     session_id = input_data.get("session_id")
-    logger.info(f"[HOOK] PostToolUse for askuserquestion in session {session_id}")
+    logger.info(
+        f"[ASK_USER_HOOK] ✓ PostToolUse for askuserquestion in session {session_id}"
+    )
 
     # Get execution from registry
     execution = await _get_or_register_execution(session_id)
@@ -480,19 +491,19 @@ async def ask_user_question_post_hook(
         try:
             # Interrupt execution so it stops and waits for user input
             logger.info(
-                f"[HOOK] Interrupting execution for session {session_id} to wait for user answer"
+                f"[ASK_USER_HOOK] ⏸️  Interrupting execution for session {session_id} to wait for user answer"
             )
             await execution.client.interrupt()
             logger.info(
-                f"[HOOK] Execution interrupted successfully for session {session_id}"
+                f"[ASK_USER_HOOK] ✓ Execution interrupted successfully for session {session_id}"
             )
         except Exception as e:
             logger.error(
-                f"[HOOK] Failed to interrupt execution for session {session_id}: {e}",
+                f"[ASK_USER_HOOK] ✗ Failed to interrupt execution for session {session_id}: {e}",
                 exc_info=True,
             )
     else:
-        logger.error(f"[HOOK] No execution found for session {session_id}")
+        logger.error(f"[ASK_USER_HOOK] ✗ No execution found for session {session_id}")
 
     # Return empty - no modification needed
     return {}
