@@ -225,24 +225,25 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
           );
         })}
 
-        {/* Submit button - show if questions exist and not answered */}
+        {/* Submit button - show only for latest unanswered question */}
         {!hasAnswered && questions.length > 0 && (
           <>
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || !isLatestMessage}
-              className="w-full px-4 py-2 bg-primary text-white rounded-lg type-body-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <>Submitting...</>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Submit Answers
-                </>
-              )}
-            </button>
-            {!isLatestMessage && (
+            {isLatestMessage ? (
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="w-full px-4 py-2 bg-primary text-white rounded-lg type-body-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>Submitting...</>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Submit Answers
+                  </>
+                )}
+              </button>
+            ) : (
               <div className="type-caption text-amber-600 text-center">
                 ⚠️ This question is outdated. Only the latest question can be answered.
               </div>
