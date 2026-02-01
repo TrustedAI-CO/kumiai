@@ -77,8 +77,11 @@ class AssistantSessionBuilder(SessionBuilder):
                 )
 
         # Base file editing tools
-        # Include "Skill" to enable SDK auto-discovery of skills in .claude/skills/
-        base_tools = ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill"]
+        base_tools = ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
+
+        # Add "Skill" to enable SDK auto-discovery of skills in .claude/skills/
+        if "Skill" not in base_tools:
+            base_tools.append("Skill")
 
         # Combine with agent-specific tools
         all_tools = base_tools + agent_tools
