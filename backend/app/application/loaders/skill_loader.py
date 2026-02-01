@@ -166,6 +166,11 @@ class SkillLoader:
         # Use .claude/skills/ directory per Claude SDK specification
         skills_dir = session_dir / ".claude" / "skills" if session_dir else None
 
+        # DEBUG: Log the actual path being used
+        logger.info(f"[SKILL_LOADER_DEBUG] session_dir: {session_dir}")
+        logger.info(f"[SKILL_LOADER_DEBUG] skills_dir: {skills_dir}")
+        logger.info(f"[SKILL_LOADER_DEBUG] Creating symlinks at: {skills_dir}")
+
         for skill_id in skill_ids:
             try:
                 # Load skill description (for backward compatibility)
