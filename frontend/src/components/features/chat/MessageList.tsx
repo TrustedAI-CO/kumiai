@@ -148,6 +148,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             agentAvatar={agentAvatar || 'default-avatar'}
             agents={agents}
             onSessionJump={onSessionJump}
+            sessionId={instanceId}
           />
         );
       })}

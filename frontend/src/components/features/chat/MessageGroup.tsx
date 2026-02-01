@@ -23,9 +23,10 @@ interface MessageGroupProps {
   agentAvatar: string;
   agents: Agent[];
   onSessionJump?: (sessionId: string) => void;
+  sessionId?: string;
 }
 
-export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, onSessionJump }: MessageGroupProps) {
+export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, onSessionJump, sessionId }: MessageGroupProps) {
   if (messages.length === 0) return null;
 
   // Get display info from first message
@@ -100,6 +101,7 @@ export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, 
                       toolId: msg.toolId,
                       result: msg.toolResult,
                       isLoading: !msg.toolResult && !msg.toolError, // Loading if no result yet
+                      sessionId,
                     })}
                   </div>
                 );
