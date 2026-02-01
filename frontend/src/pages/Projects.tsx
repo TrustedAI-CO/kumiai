@@ -72,9 +72,9 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
   }, [showArchived]);
 
   // Poll for session status updates every 5 seconds (with Page Visibility API)
+  // Note: Request cancellation via AbortController requires API client updates
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    let abortController = new AbortController();
 
     const startPolling = () => {
       // Clear any existing interval
@@ -96,9 +96,7 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
         clearInterval(interval);
         interval = null;
       }
-      // Cancel any in-flight requests
-      abortController.abort();
-      abortController = new AbortController();
+      // TODO: Cancel in-flight requests when API client supports AbortSignal
     };
 
     const handleVisibilityChange = () => {

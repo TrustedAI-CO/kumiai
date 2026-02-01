@@ -828,8 +828,11 @@ async def execute_query(
             while True:
                 try:
                     # Wait for next event from queue (with timeout)
-                    # Reduced from 600s to 90s to prevent hanging connections
-                    event_dict = await asyncio.wait_for(event_queue.get(), timeout=90.0)
+                    # 180s (3 min) timeout balances responsiveness vs long-running operations
+                    # Reduced from 600s (10 min) to prevent hung connections accumulating
+                    event_dict = await asyncio.wait_for(
+                        event_queue.get(), timeout=180.0
+                    )
 
                     # Convert dict back to SSE format
                     event_type = event_dict.get("event", "message")
@@ -853,11 +856,11 @@ async def execute_query(
                         break
 
                 except asyncio.TimeoutError:
-                    # No events for 90 seconds - session likely hung
+                    # No events for 180 seconds (3 minutes) - session likely hung
                     logger.error(
                         "stream_timeout", extra={"session_id": str(session_id)}
                     )
-                    yield f"event: error\ndata: {json.dumps({'session_id': str(session_id), 'error': 'Stream timeout after 90 seconds'})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'session_id': str(session_id), 'error': 'Stream timeout after 180 seconds'})}\n\n"
                     break
 
             # Small delay to ensure all SSE events are flushed to client

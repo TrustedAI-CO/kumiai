@@ -86,27 +86,39 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
     try:
         engine = get_engine()
         pool = engine.pool
-        pool_status = {
-            "size": pool.size(),
-            "checked_in": pool.checkedin(),
-            "checked_out": pool.checkedout(),
-            "overflow": pool.overflow(),
-            "status": "healthy",
-        }
+        pool_class_name = pool.__class__.__name__
 
-        # Calculate pool utilization percentage
-        total_available = pool.size() + pool.overflow()
-        if total_available > 0:
-            utilization = (pool.checkedout() / total_available) * 100
-            pool_status["utilization_percent"] = round(utilization, 2)
+        # StaticPool (SQLite) has different interface than QueuePool (PostgreSQL)
+        if pool_class_name == "StaticPool":
+            pool_status = {
+                "type": "StaticPool",
+                "description": "Single persistent connection (SQLite)",
+                "status": "healthy",
+            }
+        else:
+            # QueuePool or NullPool (PostgreSQL)
+            pool_status = {
+                "type": pool_class_name,
+                "size": pool.size(),
+                "checked_in": pool.checkedin(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "status": "healthy",
+            }
 
-            # Warn if pool utilization is high
-            if utilization > settings.health_pool_warning_threshold:
-                pool_status["status"] = "warning"
-                pool_status["message"] = (
-                    f"Pool utilization above {settings.health_pool_warning_threshold}%"
-                )
-                health_status["status"] = "degraded"
+            # Calculate pool utilization percentage
+            total_available = pool.size() + pool.overflow()
+            if total_available > 0:
+                utilization = (pool.checkedout() / total_available) * 100
+                pool_status["utilization_percent"] = round(utilization, 2)
+
+                # Warn if pool utilization is high
+                if utilization > settings.health_pool_warning_threshold:
+                    pool_status["status"] = "warning"
+                    pool_status["message"] = (
+                        f"Pool utilization above {settings.health_pool_warning_threshold}%"
+                    )
+                    health_status["status"] = "degraded"
 
         health_status["checks"]["connection_pool"] = pool_status
     except Exception as e:

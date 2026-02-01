@@ -43,8 +43,20 @@ def get_engine() -> AsyncEngine:
 
         if is_sqlite:
             # SQLite-specific configuration for better concurrency
-            # Uses StaticPool to maintain a single connection (SQLite limitation)
-            # WAL mode enables concurrent reads, single writer
+            #
+            # WHY StaticPool?
+            # - SQLite uses file-level locking, not connection-based concurrency
+            # - Multiple connections don't improve throughput (can cause lock contention)
+            # - StaticPool maintains a single persistent connection, avoiding overhead
+            #
+            # CONCURRENCY STRATEGY:
+            # - WAL mode (enabled below) allows multiple readers + single writer
+            # - 30-second busy_timeout prevents immediate lock errors
+            # - Single connection eliminates connection pool exhaustion issues
+            #
+            # PRODUCTION NOTE:
+            # - For high-concurrency production use, consider PostgreSQL
+            # - SQLite + WAL works well for moderate load (< 100 concurrent users)
             _engine = create_async_engine(
                 database_url,
                 echo=False,
@@ -65,14 +77,14 @@ def get_engine() -> AsyncEngine:
 
         else:
             # PostgreSQL or other database configuration
-            # Uses increased pool settings to prevent exhaustion
+            # Uses configurable pool settings (see config.py for defaults)
             _engine = create_async_engine(
                 database_url,
                 echo=False,
-                pool_size=20,  # Increased from default 5 to prevent pool exhaustion
-                max_overflow=10,  # Allow extra connections during spikes
-                pool_timeout=30,  # Wait 30s for available connection
-                pool_recycle=3600,  # Recycle connections after 1 hour
+                pool_size=settings.db_pool_size,
+                max_overflow=settings.db_max_overflow,
+                pool_timeout=settings.db_pool_timeout,
+                pool_recycle=settings.db_pool_recycle,
                 pool_pre_ping=True,  # Verify connections before use
             )
     return _engine
