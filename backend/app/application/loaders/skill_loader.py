@@ -84,7 +84,7 @@ class SkillLoader:
 
 {skill.description or "No description provided"}
 
-**Documentation:** See `skills/{skill_id}/SKILL.md` for detailed instructions.
+**Documentation:** See `.claude/skills/{skill_id}/SKILL.md` for detailed instructions.
 
 {content[:500]}{"..." if len(content) > 500 else ""}
 """
@@ -145,30 +145,34 @@ class SkillLoader:
         session_dir: Optional[Path] = None,
     ) -> List[str]:
         """
-        Load multiple skills with descriptions and optionally create symlinks.
+        Load multiple skills and create symlinks in .claude/skills/ for SDK auto-discovery.
 
-        Convenience method for session initialization.
+        Creates symlinks following Claude SDK specification:
+        - Skills directory: .claude/skills/ (relative to working directory)
+        - SDK auto-discovers skills when "Skill" is in allowed_tools
+        - Returns skill descriptions for backward compatibility (will be deprecated)
 
         Args:
             skill_ids: List of skill identifiers
-            session_dir: Optional session directory for creating symlinks
+            session_dir: Optional session directory (working directory) for creating symlinks
 
         Returns:
-            List of formatted skill descriptions for system prompt
+            List of formatted skill descriptions (deprecated - SDK should handle this)
 
         Raises:
             NotFoundError: If any skill not found
         """
         descriptions = []
-        skills_dir = session_dir / "skills" if session_dir else None
+        # Use .claude/skills/ directory per Claude SDK specification
+        skills_dir = session_dir / ".claude" / "skills" if session_dir else None
 
         for skill_id in skill_ids:
             try:
-                # Load skill description
+                # Load skill description (for backward compatibility)
                 description = await self.load_skill_description(skill_id)
                 descriptions.append(description)
 
-                # Create symlink if session directory provided
+                # Create symlink in .claude/skills/ for SDK auto-discovery
                 if skills_dir:
                     await self.create_symlink(skill_id, skills_dir)
 
@@ -178,4 +182,6 @@ class SkillLoader:
                 continue
 
         logger.info(f"Loaded {len(descriptions)}/{len(skill_ids)} skills for session")
+        if skills_dir:
+            logger.info(f"Created symlinks in {skills_dir} for SDK auto-discovery")
         return descriptions
