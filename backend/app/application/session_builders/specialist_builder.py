@@ -58,6 +58,10 @@ class SpecialistSessionBuilder(SessionBuilder):
             skill_descriptions,
         ) = await self._load_agent_content(context.agent_id, working_dir)
 
+        # Add "Skill" to enable SDK auto-discovery of skills in .claude/skills/
+        if "Skill" not in base_tools:
+            base_tools.append("Skill")
+
         # Build allowed tools (includes mcp__ prefixed tools)
         allowed_tools = self._build_allowed_tools(
             base_tools=base_tools,
@@ -100,6 +104,7 @@ class SpecialistSessionBuilder(SessionBuilder):
             "system_prompt": system_prompt,
             "allowed_tools": allowed_tools,
             "mcp_servers": mcp_servers,
+            "setting_sources": ["user", "project"],  # Load skills from filesystem
             "include_partial_messages": True,  # Enable streaming
             "permission_mode": "bypassPermissions",
             "hooks": {

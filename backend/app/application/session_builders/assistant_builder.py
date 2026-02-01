@@ -79,6 +79,10 @@ class AssistantSessionBuilder(SessionBuilder):
         # Base file editing tools
         base_tools = ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 
+        # Add "Skill" to enable SDK auto-discovery of skills in .claude/skills/
+        if "Skill" not in base_tools:
+            base_tools.append("Skill")
+
         # Combine with agent-specific tools
         all_tools = base_tools + agent_tools
 
@@ -128,6 +132,7 @@ class AssistantSessionBuilder(SessionBuilder):
             "system_prompt": system_prompt,
             "allowed_tools": allowed_tools,
             "mcp_servers": mcp_servers,
+            "setting_sources": ["user", "project"],  # Load skills from filesystem
             "include_partial_messages": True,  # Enable streaming
             "permission_mode": "bypassPermissions",
             "hooks": {

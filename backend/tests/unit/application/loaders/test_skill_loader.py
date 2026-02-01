@@ -95,7 +95,7 @@ class TestSkillLoader:
         # Should contain skill description
         assert "Test skill description" in description
         # Should contain documentation reference
-        assert "skills/test-skill/SKILL.md" in description
+        assert ".claude/skills/test-skill/SKILL.md" in description
         # Should contain content preview
         assert skill_content in description
 
@@ -279,7 +279,7 @@ class TestSkillLoader:
 
         assert len(descriptions) == 1
         # Verify symlink was created
-        symlink_path = session_dir / "skills" / "test-skill"
+        symlink_path = session_dir / ".claude" / "skills" / "test-skill"
         assert symlink_path.is_symlink()
 
     @pytest.mark.asyncio
