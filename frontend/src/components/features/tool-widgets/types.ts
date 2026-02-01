@@ -8,6 +8,7 @@ export interface ToolWidgetProps {
   toolId?: string;
   result?: any;
   isLoading?: boolean;
+  sessionId?: string;
 }
 
 export interface ParsedResult {

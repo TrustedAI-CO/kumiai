@@ -8,7 +8,6 @@ import { CollapsibleWidget } from './CollapsibleWidget';
 import { WIDGET_HEADER_TEXT_SIZE } from './utils';
 import type { ToolWidgetProps } from './types';
 import { sendMessage } from '@/lib/services/messageSender';
-import { useParams } from 'react-router-dom';
 
 interface QuestionOption {
   label: string;
@@ -30,8 +29,8 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   toolArgs,
   result,
   isLoading,
+  sessionId,
 }) => {
-  const { instanceId = '' } = useParams<{ instanceId: string }>();
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string[]>>({});
   const [otherInputs, setOtherInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,9 +94,14 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
 
     const answerMessage = `My answers:\n\n${answerLines.join('\n')}`;
 
+    if (!sessionId) {
+      alert('Session ID not available. Cannot submit answers.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await sendMessage(instanceId, answerMessage);
+      await sendMessage(sessionId, answerMessage);
     } catch (error) {
       console.error('Failed to send answer:', error);
       alert('Failed to send answer. Please try again.');
@@ -150,10 +154,10 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
 
           return (
             <div key={qIdx} className="space-y-3">
-              <div>
-                <div className="type-body font-medium text-gray-900 mb-1">{q.question}</div>
+              <div className="flex items-baseline gap-2 mb-1">
+                <div className="type-body font-medium text-gray-900">{q.question}</div>
                 {q.multiSelect && (
-                  <div className="type-caption text-gray-500">Select all that apply</div>
+                  <span className="type-caption text-gray-500 whitespace-nowrap">(Select all that apply)</span>
                 )}
               </div>
 
@@ -207,8 +211,8 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
           );
         })}
 
-        {/* Submit button */}
-        {!hasAnswered && !isLoading && (
+        {/* Submit button - show if questions exist and not answered */}
+        {!hasAnswered && questions.length > 0 && (
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
