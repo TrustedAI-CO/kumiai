@@ -35,6 +35,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string[]>>({});
   const [otherInputs, setOtherInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   // Parse questions from toolArgs
   let questionData: QuestionData | null = null;
@@ -122,63 +123,89 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   return (
     <CollapsibleWidget header={header} toolArgs={toolArgs} result={result}>
       <div className="p-4 space-y-4">
-        {questions.map((q, qIdx) => (
-          <div key={qIdx} className="space-y-3">
-            <div>
-              <div className="type-body font-medium text-gray-900 mb-1">{q.question}</div>
-              {q.multiSelect && (
-                <div className="type-caption text-gray-500">Select all that apply</div>
-              )}
-            </div>
-
-            {/* Options */}
-            <div className="space-y-2">
-              {q.options.map((opt, optIdx) => {
-                const isSelected = (selectedAnswers[qIdx] || []).includes(opt.label);
-                const inputType = q.multiSelect ? 'checkbox' : 'radio';
-                const inputName = `question-${qIdx}`;
-
-                return (
-                  <label
-                    key={optIdx}
-                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'border-primary bg-primary/5'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    } ${hasAnswered ? 'opacity-60 pointer-events-none' : ''}`}
-                  >
-                    <input
-                      type={inputType}
-                      name={inputName}
-                      checked={isSelected}
-                      onChange={() => handleOptionChange(qIdx, opt.label, q.multiSelect)}
-                      disabled={hasAnswered}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
-                      <div className="type-body-sm font-medium text-gray-900">{opt.label}</div>
-                      <div className="type-caption text-gray-600 mt-0.5">{opt.description}</div>
-                    </div>
-                  </label>
-                );
-              })}
-
-              {/* Other option */}
-              {!hasAnswered && (
-                <div className="flex items-center gap-2">
-                  <span className="type-body-sm text-gray-600">Other:</span>
-                  <input
-                    type="text"
-                    value={otherInputs[qIdx] || ''}
-                    onChange={(e) => handleOtherInputChange(qIdx, e.target.value)}
-                    placeholder="Type your answer..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg type-body-sm focus:outline-none focus:border-primary"
-                  />
-                </div>
-              )}
-            </div>
+        {/* Tabs for multiple questions */}
+        {questions.length > 1 && !hasAnswered && (
+          <div className="flex gap-1 border-b border-gray-200">
+            {questions.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveTab(idx)}
+                className={`px-4 py-2 type-body-sm font-medium transition-colors border-b-2 ${
+                  activeTab === idx
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {q.header}
+              </button>
+            ))}
           </div>
-        ))}
+        )}
+
+        {/* Current question */}
+        {questions.map((q, qIdx) => {
+          // Show all questions if answered, or only active tab if not answered
+          const shouldShow = hasAnswered || (questions.length === 1) || (qIdx === activeTab);
+          if (!shouldShow) return null;
+
+          return (
+            <div key={qIdx} className="space-y-3">
+              <div>
+                <div className="type-body font-medium text-gray-900 mb-1">{q.question}</div>
+                {q.multiSelect && (
+                  <div className="type-caption text-gray-500">Select all that apply</div>
+                )}
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2">
+                {q.options.map((opt, optIdx) => {
+                  const isSelected = (selectedAnswers[qIdx] || []).includes(opt.label);
+                  const inputType = q.multiSelect ? 'checkbox' : 'radio';
+                  const inputName = `question-${qIdx}`;
+
+                  return (
+                    <label
+                      key={optIdx}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      } ${hasAnswered ? 'opacity-60 pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type={inputType}
+                        name={inputName}
+                        checked={isSelected}
+                        onChange={() => handleOptionChange(qIdx, opt.label, q.multiSelect)}
+                        disabled={hasAnswered}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="type-body-sm font-medium text-gray-900">{opt.label}</div>
+                        <div className="type-caption text-gray-600 mt-0.5">{opt.description}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+
+                {/* Other option */}
+                {!hasAnswered && (
+                  <div className="flex items-center gap-2">
+                    <span className="type-body-sm text-gray-600">Other:</span>
+                    <input
+                      type="text"
+                      value={otherInputs[qIdx] || ''}
+                      onChange={(e) => handleOtherInputChange(qIdx, e.target.value)}
+                      placeholder="Type your answer..."
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg type-body-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
         {/* Submit button */}
         {!hasAnswered && !isLoading && (
