@@ -27,11 +27,25 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///{kumiai_home}/kumiai.db",
         description="Database connection URL (SQLite by default)",
     )
-    db_pool_size: int = Field(default=5, description="Database connection pool size")
-    db_max_overflow: int = Field(default=5, description="Max overflow connections")
-    db_pool_timeout: int = Field(default=30, description="Pool timeout in seconds")
+    db_pool_size: int = Field(
+        default=20, description="Database connection pool size (PostgreSQL only)"
+    )
+    db_max_overflow: int = Field(
+        default=10, description="Max overflow connections (PostgreSQL only)"
+    )
+    db_pool_timeout: int = Field(
+        default=30, description="Pool timeout in seconds (PostgreSQL only)"
+    )
     db_pool_recycle: int = Field(
-        default=3600, description="Connection recycle time in seconds"
+        default=3600, description="Connection recycle time in seconds (PostgreSQL only)"
+    )
+
+    # Health Check Settings
+    health_pool_warning_threshold: int = Field(
+        default=80, description="Pool utilization % threshold for warning"
+    )
+    health_sse_warning_threshold: int = Field(
+        default=50, description="SSE connection count threshold for warning"
     )
 
     # Paths

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 
@@ -42,9 +43,24 @@ def get_engine() -> AsyncEngine:
 
         if is_sqlite:
             # SQLite-specific configuration for better concurrency
+            #
+            # WHY StaticPool?
+            # - SQLite uses file-level locking, not connection-based concurrency
+            # - Multiple connections don't improve throughput (can cause lock contention)
+            # - StaticPool maintains a single persistent connection, avoiding overhead
+            #
+            # CONCURRENCY STRATEGY:
+            # - WAL mode (enabled below) allows multiple readers + single writer
+            # - 30-second busy_timeout prevents immediate lock errors
+            # - Single connection eliminates connection pool exhaustion issues
+            #
+            # PRODUCTION NOTE:
+            # - For high-concurrency production use, consider PostgreSQL
+            # - SQLite + WAL works well for moderate load (< 100 concurrent users)
             _engine = create_async_engine(
                 database_url,
                 echo=False,
+                poolclass=StaticPool,  # Single persistent connection for SQLite
                 connect_args={
                     "check_same_thread": False,  # Required for SQLite with async
                     "timeout": 30,  # Wait up to 30 seconds for locks
@@ -61,6 +77,7 @@ def get_engine() -> AsyncEngine:
 
         else:
             # PostgreSQL or other database configuration
+            # Uses configurable pool settings (see config.py for defaults)
             _engine = create_async_engine(
                 database_url,
                 echo=False,
@@ -68,7 +85,7 @@ def get_engine() -> AsyncEngine:
                 max_overflow=settings.db_max_overflow,
                 pool_timeout=settings.db_pool_timeout,
                 pool_recycle=settings.db_pool_recycle,
-                pool_pre_ping=True,
+                pool_pre_ping=True,  # Verify connections before use
             )
     return _engine
 

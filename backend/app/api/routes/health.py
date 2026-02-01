@@ -7,7 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.infrastructure.database.connection import get_db_session
+from app.infrastructure.database.connection import get_db_session, get_engine
+from app.infrastructure.sse.manager import sse_manager
 
 router = APIRouter()
 
@@ -80,5 +81,77 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
     }
     if not api_key_configured:
         health_status["status"] = "degraded"
+
+    # Check database connection pool status
+    try:
+        engine = get_engine()
+        pool = engine.pool
+        pool_class_name = pool.__class__.__name__
+
+        # StaticPool (SQLite) has different interface than QueuePool (PostgreSQL)
+        if pool_class_name == "StaticPool":
+            pool_status = {
+                "type": "StaticPool",
+                "description": "Single persistent connection (SQLite)",
+                "status": "healthy",
+            }
+        else:
+            # QueuePool or NullPool (PostgreSQL)
+            pool_status = {
+                "type": pool_class_name,
+                "size": pool.size(),
+                "checked_in": pool.checkedin(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "status": "healthy",
+            }
+
+            # Calculate pool utilization percentage
+            total_available = pool.size() + pool.overflow()
+            if total_available > 0:
+                utilization = (pool.checkedout() / total_available) * 100
+                pool_status["utilization_percent"] = round(utilization, 2)
+
+                # Warn if pool utilization is high
+                if utilization > settings.health_pool_warning_threshold:
+                    pool_status["status"] = "warning"
+                    pool_status["message"] = (
+                        f"Pool utilization above {settings.health_pool_warning_threshold}%"
+                    )
+                    health_status["status"] = "degraded"
+
+        health_status["checks"]["connection_pool"] = pool_status
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["checks"]["connection_pool"] = {
+            "status": "error",
+            "error": str(e),
+        }
+
+    # Check SSE connection status
+    try:
+        total_sse_connections = sse_manager.get_total_connections()
+        session_connections = sse_manager.get_all_session_connections()
+
+        sse_status = {
+            "total_connections": total_sse_connections,
+            "active_sessions": len(session_connections),
+            "status": "healthy",
+        }
+
+        # Warn if too many connections (potential leak)
+        if total_sse_connections > settings.health_sse_warning_threshold:
+            sse_status["status"] = "warning"
+            sse_status["message"] = (
+                f"High number of SSE connections: {total_sse_connections}"
+            )
+            health_status["status"] = "degraded"
+
+        health_status["checks"]["sse_connections"] = sse_status
+    except Exception as e:
+        health_status["checks"]["sse_connections"] = {
+            "status": "error",
+            "error": str(e),
+        }
 
     return health_status

@@ -170,6 +170,27 @@ class SSEManager:
         """
         return self.get_connection_count(session_id) > 0
 
+    def get_total_connections(self) -> int:
+        """
+        Get total number of active SSE connections across all sessions.
+
+        Returns:
+            Total number of active connections
+        """
+        return sum(len(queues) for queues in self._connections.values())
+
+    def get_all_session_connections(self) -> Dict[str, int]:
+        """
+        Get connection count for all sessions.
+
+        Returns:
+            Dictionary mapping session_id to connection count
+        """
+        return {
+            str(session_id): len(queues)
+            for session_id, queues in self._connections.items()
+        }
+
 
 # Global singleton instance
 sse_manager = SSEManager()

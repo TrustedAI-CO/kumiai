@@ -71,13 +71,56 @@ export function Projects({ currentProjectId, onProjectSelect }: ProjectsProps) {
     loadAllPmSessions();
   }, [showArchived]);
 
-  // Poll for session status updates every 5 seconds
+  // Poll for session status updates every 5 seconds (with Page Visibility API)
+  // Note: Request cancellation via AbortController requires API client updates
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadAllPmSessions();
-    }, 5000);
+    let interval: NodeJS.Timeout | null = null;
 
-    return () => clearInterval(interval);
+    const startPolling = () => {
+      // Clear any existing interval
+      if (interval) {
+        clearInterval(interval);
+      }
+
+      // Immediately load when starting/resuming
+      loadAllPmSessions();
+
+      // Start interval
+      interval = setInterval(() => {
+        loadAllPmSessions();
+      }, 5000);
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+      // TODO: Cancel in-flight requests when API client supports AbortSignal
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden/backgrounded - stop polling
+        stopPolling();
+      } else {
+        // Page is visible - resume polling
+        startPolling();
+      }
+    };
+
+    // Start polling if page is visible
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Load PM session when project is selected

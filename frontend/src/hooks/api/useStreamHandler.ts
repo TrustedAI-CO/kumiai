@@ -8,6 +8,44 @@ import { useCallback, useRef } from 'react';
 import type { SessionEvent, ContentBlockEvent, AutoSaveEvent, UserNotificationEvent, UserMessageEvent, QueueStatusEvent, QueuedMessagePreview, ToolUseEvent, ToolCompleteEvent } from '@/types/session';
 import { desktopNotifications } from '@/lib/utils';
 
+/**
+ * Simple LRU cache for event IDs to prevent memory leaks.
+ * Uses a Map to maintain insertion order and limits size.
+ */
+class EventIdCache {
+  private cache: Map<string, boolean>;
+  private maxSize: number;
+
+  constructor(maxSize: number = 1000) {
+    this.cache = new Map();
+    this.maxSize = maxSize;
+  }
+
+  has(eventId: string): boolean {
+    return this.cache.has(eventId);
+  }
+
+  add(eventId: string): void {
+    // If already exists, delete and re-add to move to end (true LRU)
+    if (this.cache.has(eventId)) {
+      this.cache.delete(eventId);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove oldest entry (first in Map)
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(eventId, true);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
 interface UseStreamHandlerOptions {
   appendToAssistant: (content: string) => void;
   completeAssistantMessage: () => void;
@@ -42,8 +80,8 @@ export function useStreamHandler({
   // Track the current response_id being streamed (null when not streaming)
   const currentResponseIdRef = useRef<string | null>(null);
 
-  // Track processed event IDs to prevent duplicates
-  const processedEventIdsRef = useRef<Set<string>>(new Set());
+  // Track processed event IDs to prevent duplicates (with LRU cache to prevent memory leaks)
+  const processedEventIdsRef = useRef<EventIdCache>(new EventIdCache(1000));
 
   const handleStreamEvent = useCallback(
     (event: SessionEvent) => {
