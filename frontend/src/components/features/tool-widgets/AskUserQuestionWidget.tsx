@@ -31,6 +31,8 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   isLoading,
   sessionId,
 }) => {
+  console.log('[AskUserQuestionWidget] Received sessionId:', sessionId);
+
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string[]>>({});
   const [otherInputs, setOtherInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,16 +85,22 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
       }
     }
 
-    // Build answer message
+    // Build answer message with proper markdown formatting
     const answerLines = questions.map((q, idx) => {
       const answers = selectedAnswers[idx] || [];
       const otherValue = otherInputs[idx];
       const allAnswers = [...answers, otherValue].filter(Boolean);
 
-      return `**${q.header}:** ${allAnswers.join(', ')}`;
+      // Format as bullet points if multiple answers, otherwise single line
+      if (allAnswers.length > 1) {
+        const bulletPoints = allAnswers.map(ans => `  - ${ans}`).join('\n');
+        return `**${q.header}:**\n${bulletPoints}`;
+      } else {
+        return `**${q.header}:** ${allAnswers[0]}`;
+      }
     });
 
-    const answerMessage = `My answers:\n\n${answerLines.join('\n')}`;
+    const answerMessage = `My answers:\n\n${answerLines.join('\n\n')}`;
 
     if (!sessionId) {
       alert('Session ID not available. Cannot submit answers.');
@@ -100,14 +108,19 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
     }
 
     setIsSubmitting(true);
-    try {
-      await sendMessage(sessionId, answerMessage);
-    } catch (error) {
-      console.error('Failed to send answer:', error);
-      alert('Failed to send answer. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+
+    await sendMessage({
+      instanceId: sessionId,
+      content: answerMessage,
+      onUserMessageSent: () => {
+        setIsSubmitting(false);
+      },
+      onError: (error) => {
+        console.error('Failed to send answer:', error);
+        alert('Failed to send answer. Please try again.');
+        setIsSubmitting(false);
+      },
+    });
   };
 
   const header = (
