@@ -454,6 +454,50 @@ async def user_prompt_submit_hook(
     return {}
 
 
+async def ask_user_question_post_hook(
+    input_data: Dict[str, Any], tool_use_id: str, context: Any
+) -> Dict[str, Any]:
+    """
+    Hook: PostToolUse for askuserquestion
+    Fires after AskUserQuestion tool completes.
+
+    Interrupts execution so user can answer the questions.
+    """
+    if input_data.get("hook_event_name") != "PostToolUse":
+        return {}
+
+    tool_name = input_data.get("tool_name")
+    if tool_name != "askuserquestion":
+        return {}
+
+    session_id = input_data.get("session_id")
+    logger.info(f"[HOOK] PostToolUse for askuserquestion in session {session_id}")
+
+    # Get execution from registry
+    execution = await _get_or_register_execution(session_id)
+
+    if execution:
+        try:
+            # Interrupt execution so it stops and waits for user input
+            logger.info(
+                f"[HOOK] Interrupting execution for session {session_id} to wait for user answer"
+            )
+            await execution.client.interrupt()
+            logger.info(
+                f"[HOOK] Execution interrupted successfully for session {session_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[HOOK] Failed to interrupt execution for session {session_id}: {e}",
+                exc_info=True,
+            )
+    else:
+        logger.error(f"[HOOK] No execution found for session {session_id}")
+
+    # Return empty - no modification needed
+    return {}
+
+
 async def stop_hook(
     input_data: Dict[str, Any], tool_use_id: str, context: Any
 ) -> Dict[str, Any]:

@@ -447,6 +447,95 @@ Your message is being delivered to the PM.""",
 
 
 @tool(
+    "askuserquestion",
+    "Ask the user interactive questions with multiple choice options",
+    {
+        "questions": list,
+    },
+)
+async def ask_user_question(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ask the user one or more questions with predefined options.
+
+    Use this when you need the user to make a choice or provide input during execution.
+    The execution will pause until the user responds.
+
+    Each question should have:
+    - question: The question text
+    - header: Short label (max 12 chars)
+    - options: List of {label, description} choices
+    - multiSelect: Whether user can select multiple options
+
+    Args (from args dict):
+        questions: List of question objects with structure:
+            [
+                {
+                    "question": "Which library should we use?",
+                    "header": "Library",
+                    "multiSelect": false,
+                    "options": [
+                        {"label": "React", "description": "Popular UI library"},
+                        {"label": "Vue", "description": "Progressive framework"}
+                    ]
+                }
+            ]
+
+    Returns:
+        Confirmation that questions were presented to user.
+        Execution will pause here until user responds.
+    """
+    try:
+        # Extract and validate questions
+        questions = args.get("questions", [])
+
+        if not questions:
+            return _error("No questions provided")
+
+        if not isinstance(questions, list):
+            return _error("questions must be a list")
+
+        # Validate question structure
+        for i, q in enumerate(questions):
+            if not isinstance(q, dict):
+                return _error(f"Question {i} must be an object")
+
+            if "question" not in q:
+                return _error(f"Question {i} missing 'question' field")
+
+            if "header" not in q:
+                return _error(f"Question {i} missing 'header' field")
+
+            if "options" not in q:
+                return _error(f"Question {i} missing 'options' field")
+
+            if not isinstance(q["options"], list) or len(q["options"]) < 2:
+                return _error(f"Question {i} must have at least 2 options")
+
+            # Validate each option
+            for j, opt in enumerate(q["options"]):
+                if not isinstance(opt, dict):
+                    return _error(f"Question {i}, option {j} must be an object")
+                if "label" not in opt:
+                    return _error(f"Question {i}, option {j} missing 'label'")
+                if "description" not in opt:
+                    return _error(f"Question {i}, option {j} missing 'description'")
+
+        logger.info(f"[COMMON_TOOLS] Asking user {len(questions)} question(s)")
+
+        # Return the questions as JSON - the PostToolUse hook will interrupt execution
+        # The frontend widget will render these questions for the user
+        import json
+
+        return {
+            "content": [{"type": "text", "text": json.dumps({"questions": questions})}]
+        }
+
+    except Exception as e:
+        logger.error(f"[COMMON_TOOLS] Error in ask_user_question: {e}", exc_info=True)
+        return _error(f"Failed to ask questions: {str(e)}")
+
+
+@tool(
     "remind",
     "Schedule a reminder message to be sent back to you after a delay",
     {
@@ -692,5 +781,12 @@ async def _send_message_background(
 common_tools_server = create_sdk_mcp_server(
     name="common_tools",
     version="1.0.0",
-    tools=[show_file, get_session_info, contact_instance, contact_pm, remind],
+    tools=[
+        show_file,
+        get_session_info,
+        contact_instance,
+        contact_pm,
+        remind,
+        ask_user_question,
+    ],
 )
