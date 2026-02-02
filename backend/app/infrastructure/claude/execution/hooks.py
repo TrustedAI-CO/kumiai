@@ -455,7 +455,7 @@ async def user_prompt_submit_hook(
 
 
 # Delay for tool completion before interrupting (in seconds)
-TOOL_COMPLETION_DELAY_SEC = 0.3
+TOOL_COMPLETION_DELAY_SEC = 1.0
 
 
 async def ask_user_question_pre_hook(
