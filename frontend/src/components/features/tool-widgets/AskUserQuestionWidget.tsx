@@ -36,6 +36,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   const [otherInputs, setOtherInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Parse questions from toolArgs
   let questionData: QuestionData | null = null;
@@ -72,14 +73,26 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
     setOtherInputs(prev => ({ ...prev, [questionIdx]: value }));
   };
 
+  // Sanitize user input to prevent XSS
+  const sanitizeInput = (input: string): string => {
+    return input
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;');
+  };
+
   const handleSubmit = async () => {
+    setValidationError(null);
+
     // Validate all questions have answers
     for (let i = 0; i < questions.length; i++) {
       const answers = selectedAnswers[i] || [];
-      const otherValue = otherInputs[i];
+      const otherValue = otherInputs[i]?.trim();
 
       if (answers.length === 0 && !otherValue) {
-        alert(`Please answer question ${i + 1}`);
+        setValidationError(`Please answer question ${i + 1}`);
         return;
       }
     }
@@ -87,8 +100,10 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
     // Build answer message with proper markdown formatting
     const answerLines = questions.map((q, idx) => {
       const answers = selectedAnswers[idx] || [];
-      const otherValue = otherInputs[idx];
-      const allAnswers = [...answers, otherValue].filter(Boolean);
+      const otherValue = otherInputs[idx]?.trim();
+      // Sanitize user input from "Other" field
+      const sanitizedOther = otherValue ? sanitizeInput(otherValue) : null;
+      const allAnswers = [...answers, sanitizedOther].filter(Boolean);
 
       // Format as bullet points if multiple answers, otherwise single line
       if (allAnswers.length > 1) {
@@ -102,7 +117,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
     const answerMessage = `My answers:\n\n${answerLines.join('\n\n')}`;
 
     if (!sessionId) {
-      alert('Session ID not available. Cannot submit answers.');
+      setValidationError('Session ID not available. Cannot submit answers.');
       return;
     }
 
@@ -116,7 +131,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
       },
       onError: (error) => {
         console.error('Failed to send answer:', error);
-        alert('Failed to send answer. Please try again.');
+        setValidationError('Failed to send answer. Please try again.');
         setIsSubmitting(false);
       },
     });
@@ -222,6 +237,13 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
             </div>
           );
         })}
+
+        {/* Validation error display */}
+        {validationError && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 type-body-sm text-red-700">
+            {validationError}
+          </div>
+        )}
 
         {/* Submit button - show only for latest unanswered question */}
         {!hasAnswered && questions.length > 0 && isLatestMessage && (

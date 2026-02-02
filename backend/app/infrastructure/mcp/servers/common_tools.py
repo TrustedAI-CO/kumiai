@@ -494,6 +494,10 @@ async def ask_user_question(args: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(questions, list):
             return _error("questions must be a list")
 
+        # Enforce limits to prevent DoS
+        if len(questions) > 10:
+            return _error("Maximum 10 questions allowed")
+
         # Validate question structure
         for i, q in enumerate(questions):
             if not isinstance(q, dict):
@@ -505,11 +509,19 @@ async def ask_user_question(args: Dict[str, Any]) -> Dict[str, Any]:
             if "header" not in q:
                 return _error(f"Question {i} missing 'header' field")
 
+            # Validate header length
+            if len(q["header"]) > 50:
+                return _error(f"Question {i} header exceeds 50 character limit")
+
             if "options" not in q:
                 return _error(f"Question {i} missing 'options' field")
 
             if not isinstance(q["options"], list) or len(q["options"]) < 2:
                 return _error(f"Question {i} must have at least 2 options")
+
+            # Enforce max options to prevent DoS
+            if len(q["options"]) > 10:
+                return _error(f"Question {i} has too many options (max 10)")
 
             # Validate each option
             for j, opt in enumerate(q["options"]):

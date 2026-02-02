@@ -454,6 +454,10 @@ async def user_prompt_submit_hook(
     return {}
 
 
+# Delay for tool completion before interrupting (in seconds)
+TOOL_COMPLETION_DELAY_SEC = 1.0
+
+
 async def ask_user_question_pre_hook(
     input_data: Dict[str, Any], tool_use_id: str, context: Any
 ) -> Dict[str, Any]:
@@ -486,7 +490,7 @@ async def ask_user_question_pre_hook(
 
             async def interrupt_after_delay():
                 # Delay to let tool complete and avoid race condition
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(TOOL_COMPLETION_DELAY_SEC)
                 try:
                     await execution.client.interrupt()
 
@@ -504,7 +508,15 @@ async def ask_user_question_pre_hook(
                         f"Failed to interrupt session {session_id}: {e}", exc_info=True
                     )
 
-            asyncio.create_task(interrupt_after_delay())
+            # Create task with exception handling
+            task = asyncio.create_task(interrupt_after_delay())
+            task.add_done_callback(
+                lambda t: (
+                    logger.error(f"Interrupt task failed: {t.exception()}")
+                    if not t.cancelled() and t.exception()
+                    else None
+                )
+            )
 
         return response
 
