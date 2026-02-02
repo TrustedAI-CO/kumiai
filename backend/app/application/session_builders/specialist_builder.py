@@ -115,11 +115,9 @@ class SpecialistSessionBuilder(SessionBuilder):
                         matcher=".*common_tools__(contact_instance|get_session_info).*",
                         hooks=[inject_session_context_hook],
                     ),
-                    # Interrupt for askuserquestion
-                    # TODO: Use specific matcher once we confirm exact tool name format
-                    # Expected: ".*common_tools.*askuserquestion.*"
+                    # Interrupt for AskUserQuestion
                     HookMatcher(
-                        matcher=".*",
+                        matcher="AskUserQuestion",
                         hooks=[ask_user_question_pre_hook],
                     ),
                 ],

@@ -469,9 +469,8 @@ async def ask_user_question_pre_hook(
     then schedules interrupt after tool completes.
     """
     tool_name = input_data.get("tool_name", "")
-    logger.info(f"[ASK_USER] Hook called with tool_name: {tool_name}")
 
-    if "askuserquestion" in tool_name.lower():
+    if tool_name == "AskUserQuestion":
         session_id = input_data.get("session_id")
         logger.info(f"[ASK_USER] AskUserQuestion detected for session {session_id}")
 
