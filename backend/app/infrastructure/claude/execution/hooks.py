@@ -454,56 +454,61 @@ async def user_prompt_submit_hook(
     return {}
 
 
-async def ask_user_question_post_hook(
+async def ask_user_question_pre_hook(
     input_data: Dict[str, Any], tool_use_id: str, context: Any
 ) -> Dict[str, Any]:
     """
-    Hook: PostToolUse for askuserquestion
-    Fires after AskUserQuestion tool completes.
+    Hook: PreToolUse for askuserquestion
+    Fires BEFORE AskUserQuestion tool executes.
 
-    Interrupts execution so user can answer the questions.
+    Allows the tool to execute (so questions are sent to frontend),
+    then schedules interrupt after tool completes.
     """
-    logger.info(
-        f"[ASK_USER_HOOK] Called with hook_event: {input_data.get('hook_event_name')}, "
-        f"tool_name: {input_data.get('tool_name')}"
-    )
+    tool_name = input_data.get("tool_name", "")
 
-    if input_data.get("hook_event_name") != "PostToolUse":
-        logger.debug("[ASK_USER_HOOK] Skipping - not PostToolUse event")
-        return {}
+    if "askuserquestion" in tool_name.lower():
+        session_id = input_data.get("session_id")
+        logger.info(f"AskUserQuestion detected, interrupting session {session_id}")
 
-    tool_name = input_data.get("tool_name")
-    if tool_name != "askuserquestion":
-        logger.debug(
-            f"[ASK_USER_HOOK] Skipping - tool is {tool_name}, not askuserquestion"
-        )
-        return {}
+        # Allow the tool to execute first (so questions reach the frontend)
+        response = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+            }
+        }
 
-    session_id = input_data.get("session_id")
-    logger.info(
-        f"[ASK_USER_HOOK] ✓ PostToolUse for askuserquestion in session {session_id}"
-    )
+        # Schedule interrupt to happen after tool completes
+        import asyncio
 
-    # Get execution from registry
-    execution = await _get_or_register_execution(session_id)
+        execution = await _get_or_register_execution(session_id)
+        if execution:
 
-    if execution:
-        try:
-            # Interrupt execution so it stops and waits for user input
-            logger.info(
-                f"[ASK_USER_HOOK] ⏸️  Interrupting execution for session {session_id} to wait for user answer"
-            )
-            await execution.client.interrupt()
-            logger.info(
-                f"[ASK_USER_HOOK] ✓ Execution interrupted successfully for session {session_id}"
-            )
-        except Exception as e:
-            logger.error(
-                f"[ASK_USER_HOOK] ✗ Failed to interrupt execution for session {session_id}: {e}",
-                exc_info=True,
-            )
-    else:
-        logger.error(f"[ASK_USER_HOOK] ✗ No execution found for session {session_id}")
+            async def interrupt_after_delay():
+                # Small delay to let tool complete
+                await asyncio.sleep(0.1)
+                try:
+                    await execution.client.interrupt()
+
+                    # Update session status to IDLE
+                    execution.is_processing = False
+                    from app.infrastructure.claude.state.session_status_manager import (
+                        session_status_manager,
+                    )
+
+                    await session_status_manager.reset_to_idle(execution.session_id)
+                    logger.info(f"Session {session_id} interrupted and set to IDLE")
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to interrupt session {session_id}: {e}", exc_info=True
+                    )
+
+            asyncio.create_task(interrupt_after_delay())
+
+        return response
+
+    return {}
 
     # Return empty - no modification needed
     return {}

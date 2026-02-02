@@ -32,8 +32,6 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   sessionId,
   isLatestMessage,
 }) => {
-  console.log('[AskUserQuestionWidget] Received sessionId:', sessionId, 'isLatestMessage:', isLatestMessage);
-
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string[]>>({});
   const [otherInputs, setOtherInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -139,7 +137,7 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
   );
 
   return (
-    <CollapsibleWidget header={header} toolArgs={toolArgs} result={result}>
+    <CollapsibleWidget header={header} toolArgs={toolArgs} result={result} defaultExpanded={true}>
       <div className="p-4 space-y-4">
         {/* Tabs for multiple questions */}
         {questions.length > 1 && !hasAnswered && (
@@ -226,29 +224,21 @@ export const AskUserQuestionWidget: React.FC<ToolWidgetProps> = ({
         })}
 
         {/* Submit button - show only for latest unanswered question */}
-        {!hasAnswered && questions.length > 0 && (
-          <>
-            {isLatestMessage ? (
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full px-4 py-2 bg-primary text-white rounded-lg type-body-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>Submitting...</>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Submit Answers
-                  </>
-                )}
-              </button>
+        {!hasAnswered && questions.length > 0 && isLatestMessage && (
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="w-full px-4 py-2 bg-primary text-white rounded-lg type-body-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>Submitting...</>
             ) : (
-              <div className="type-caption text-amber-600 text-center">
-                ⚠️ This question is outdated. Only the latest question can be answered.
-              </div>
+              <>
+                <Check className="h-4 w-4" />
+                Submit Answers
+              </>
             )}
-          </>
+          </button>
         )}
 
         {/* Answered state */}
