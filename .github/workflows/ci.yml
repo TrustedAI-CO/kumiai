@@ -116,6 +116,11 @@ jobs:
         run: |
           echo "Checking commit messages follow Conventional Commits..."
           git log --format=%s origin/${{ github.base_ref }}..HEAD | while read -r msg; do
+            # Skip merge commits
+            if echo "$msg" | grep -qE '^Merge '; then
+              echo "⏭️ Skipping merge commit: $msg"
+              continue
+            fi
             if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?(!)?:'; then
               echo "❌ Invalid commit message: $msg"
               echo "Expected format: type(scope): description"
