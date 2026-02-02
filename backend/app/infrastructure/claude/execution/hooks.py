@@ -485,8 +485,8 @@ async def ask_user_question_pre_hook(
         if execution:
 
             async def interrupt_after_delay():
-                # Small delay to let tool complete
-                await asyncio.sleep(0.1)
+                # Delay to let tool complete and avoid race condition
+                await asyncio.sleep(0.5)
                 try:
                     await execution.client.interrupt()
 
@@ -508,9 +508,6 @@ async def ask_user_question_pre_hook(
 
         return response
 
-    return {}
-
-    # Return empty - no modification needed
     return {}
 
 

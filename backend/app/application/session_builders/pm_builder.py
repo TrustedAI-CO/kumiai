@@ -127,7 +127,7 @@ class PMSessionBuilder(SessionBuilder):
                     ),
                     # Interrupt for askuserquestion
                     HookMatcher(
-                        matcher=".*",
+                        matcher=".*askuserquestion.*",
                         hooks=[ask_user_question_pre_hook],
                     ),
                 ],
