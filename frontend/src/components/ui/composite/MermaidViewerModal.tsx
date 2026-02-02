@@ -196,24 +196,31 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
         {/* Content */}
         <div className="flex-1 overflow-auto bg-white flex items-center justify-center p-6">
           {error ? (
-            <div className="border border-destructive/50 bg-destructive/10 rounded-md p-4 max-w-2xl">
-              <div className="flex items-start gap-2">
-                <svg
-                  className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <div>
-                  <p className="text-sm font-medium text-destructive">Invalid Mermaid Syntax</p>
-                  <p className="text-xs text-destructive/80 mt-1">{error}</p>
+            <div className="max-w-4xl w-full">
+              {/* Show original code block */}
+              <pre className="mb-4 bg-muted text-foreground px-4 py-3 text-sm font-mono overflow-x-auto leading-normal border border-border rounded">
+                <code>{chart}</code>
+              </pre>
+
+              {/* Error message below */}
+              <div className="border border-destructive/50 bg-destructive/10 rounded-md p-3">
+                <div className="flex items-start gap-2">
+                  <svg
+                    className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-destructive">Invalid Mermaid Syntax</p>
+                  </div>
                 </div>
               </div>
             </div>
