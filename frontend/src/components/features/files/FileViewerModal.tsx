@@ -53,6 +53,13 @@ const markdownComponents: Components = {
         </code>
       );
     }
+
+    // Check for Mermaid diagrams
+    if (className?.includes('language-mermaid')) {
+      const code = String(children).replace(/\n$/, '');
+      return <MermaidDiagram chart={code} className="my-3" />;
+    }
+
     return (
       <code className="block bg-muted text-foreground px-3 py-2 my-3 text-sm font-mono overflow-x-auto leading-normal border border-border rounded">
         {children}
