@@ -129,9 +129,9 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
 
   return (
     <>
-      <div className={`relative group ${className}`}>
-        {/* Action Buttons - shown on hover at right side */}
-        <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={`relative ${className}`}>
+        {/* Action Buttons - always visible at right side */}
+        <div className="absolute top-2 right-2 z-10 flex gap-1">
           <button
             onClick={handleOpenModal}
             className="p-1.5 bg-white/90 hover:bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 transition-colors"
