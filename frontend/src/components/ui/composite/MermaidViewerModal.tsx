@@ -48,16 +48,23 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
         if (containerRef.current) {
           // Sanitize SVG before injection to prevent XSS attacks
           const cleanSvg = DOMPurify.sanitize(svg, {
-            USE_PROFILES: { svg: true, svgFilters: true }
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['foreignObject'], // Allow foreignObject for text wrapping
+            ADD_ATTR: ['target', 'xlink:href', 'xmlns:xlink'], // Allow links and namespaces
+            KEEP_CONTENT: true // Preserve text content
           });
           containerRef.current.innerHTML = cleanSvg;
 
-          // Make SVG responsive and larger
+          // Make SVG responsive - use viewBox for proper scaling
           const svgElement = containerRef.current.querySelector('svg');
           if (svgElement) {
-            svgElement.style.maxWidth = '100%';
-            svgElement.style.height = 'auto';
+            // Remove fixed dimensions to allow responsive scaling
+            svgElement.removeAttribute('width');
+            svgElement.removeAttribute('height');
             svgElement.style.width = '100%';
+            svgElement.style.height = '100%';
+            svgElement.style.maxWidth = '100%';
+            svgElement.style.maxHeight = '100%';
           }
         }
       } catch (err) {
@@ -213,7 +220,7 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
           ) : (
             <div
               ref={containerRef}
-              className="mermaid-diagram w-full max-w-full transition-transform"
+              className="mermaid-diagram w-full h-full max-w-full max-h-full transition-transform"
               style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
             />
           )}

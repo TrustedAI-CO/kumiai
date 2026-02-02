@@ -50,7 +50,10 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
           // Sanitize SVG before injection to prevent XSS attacks
           // Even though Mermaid has securityLevel: 'strict', defense in depth is important
           const cleanSvg = DOMPurify.sanitize(svg, {
-            USE_PROFILES: { svg: true, svgFilters: true }
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['foreignObject'], // Allow foreignObject for text wrapping
+            ADD_ATTR: ['target', 'xlink:href', 'xmlns:xlink'], // Allow links and namespaces
+            KEEP_CONTENT: true // Preserve text content
           });
           containerRef.current.innerHTML = cleanSvg;
         }
