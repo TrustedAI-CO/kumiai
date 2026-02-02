@@ -43,9 +43,9 @@ export async function exportMermaidToPNG(
         return;
       }
 
-      // Serialize the SVG to data URL
+      // Serialize the SVG to data URL (using modern approach without deprecated btoa/unescape)
       const svgData = new XMLSerializer().serializeToString(clonedSvg);
-      const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+      const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
 
       const img = new Image();
 
