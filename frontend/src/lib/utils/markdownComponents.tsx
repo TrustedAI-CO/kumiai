@@ -1,5 +1,6 @@
 import type { Components } from 'react-markdown';
 import React from 'react';
+import { MermaidDiagram } from '@/components/ui/composite/MermaidDiagram';
 
 /**
  * Shared markdown components for consistent rendering across the application.
@@ -35,6 +36,13 @@ export const markdownComponents: Components = {
         </code>
       );
     }
+
+    // Check for Mermaid diagrams
+    if (className?.includes('language-mermaid')) {
+      const code = String(children).replace(/\n$/, '');
+      return <MermaidDiagram chart={code} className="my-3" />;
+    }
+
     return (
       <code className="block bg-muted/50 text-foreground px-3 py-2 my-3 type-body-sm font-mono overflow-x-auto leading-normal border border-border rounded">
         {children}

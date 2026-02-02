@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Download, FileText, Image as ImageIcon, FileCode, File } from 'lucide-react';
+import { X, Download, FileText, Image as ImageIcon, FileCode, File, Network } from 'lucide-react';
 import { LoadingState, EmptyState } from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +9,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { detectFileType } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { config } from '@/lib/utils/config';
+import { MermaidDiagram } from '@/components/ui/composite/MermaidDiagram';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -168,6 +169,7 @@ export function FileViewerModal({ mode, projectId, sessionId, filePath, onClose 
       case 'image': return <ImageIcon className="w-5 h-5 flex-shrink-0" />;
       case 'code': return <FileCode className="w-5 h-5 flex-shrink-0" />;
       case 'markdown': return <FileText className="w-5 h-5 flex-shrink-0" />;
+      case 'mermaid': return <Network className="w-5 h-5 flex-shrink-0" />;
       case 'pdf': return <FileText className="w-5 h-5 flex-shrink-0" />;
       case 'text': return <File className="w-5 h-5 flex-shrink-0" />;
       default: return <File className="w-5 h-5 flex-shrink-0" />;
@@ -236,6 +238,13 @@ export function FileViewerModal({ mode, projectId, sessionId, filePath, onClose 
                   >
                     {content}
                   </ReactMarkdown>
+                </div>
+              )}
+
+              {/* Mermaid Diagram Viewer */}
+              {fileInfo?.type === 'mermaid' && (
+                <div className="flex items-center justify-center min-h-[400px]">
+                  <MermaidDiagram chart={content} className="w-full" />
                 </div>
               )}
 
