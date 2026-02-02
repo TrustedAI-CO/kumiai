@@ -2,7 +2,7 @@
  * File type detection utilities for rich file viewing
  */
 
-export type FileType = 'image' | 'pdf' | 'markdown' | 'code' | 'text' | 'binary';
+export type FileType = 'image' | 'pdf' | 'markdown' | 'mermaid' | 'code' | 'text' | 'binary';
 
 interface FileTypeInfo {
   type: FileType;
@@ -17,6 +17,8 @@ const IMAGE_EXTENSIONS = new Set([
 const PDF_EXTENSIONS = new Set(['pdf']);
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx']);
+
+const MERMAID_EXTENSIONS = new Set(['mmd', 'mermaid']);
 
 const CODE_LANGUAGE_MAP: Record<string, string> = {
   // JavaScript/TypeScript
@@ -173,6 +175,11 @@ export function detectFileType(filePath: string): FileTypeInfo {
   // Markdown
   if (MARKDOWN_EXTENSIONS.has(ext)) {
     return { type: 'markdown' };
+  }
+
+  // Mermaid diagrams
+  if (MERMAID_EXTENSIONS.has(ext)) {
+    return { type: 'mermaid' };
   }
 
   // Code
