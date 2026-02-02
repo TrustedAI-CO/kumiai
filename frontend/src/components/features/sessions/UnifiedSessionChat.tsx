@@ -42,6 +42,7 @@ interface UnifiedSessionChatProps {
   role: SessionRole;
   onClose?: () => void;
   onAutoSave?: (type: 'skill' | 'agent', id: string) => void;
+  onMessageComplete?: () => void;
   onSessionJump?: (sessionId: string) => void;
   onFilesCommitted?: () => void;
   onNewSession?: () => void;
@@ -59,6 +60,7 @@ export const UnifiedSessionChat: React.FC<UnifiedSessionChatProps> = ({
   role,
   onClose,
   onAutoSave,
+  onMessageComplete,
   onSessionJump,
   onFilesCommitted,
   onNewSession,
@@ -117,6 +119,7 @@ export const UnifiedSessionChat: React.FC<UnifiedSessionChatProps> = ({
     addToolUse,
     addToolComplete,
     onAutoSave,
+    onMessageComplete,
     setIsSending,
     setError,
     setQueueSize,

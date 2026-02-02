@@ -134,6 +134,13 @@ export function SkillAssistantChat({
             className="h-full"
             readOnly={false}
             onAutoSave={handleAutoSave}
+            onMessageComplete={() => {
+              // Refresh skills list when assistant finishes responding
+              // This catches skill creation/modification via file tools
+              if (onSkillUpdated) {
+                onSkillUpdated();
+              }
+            }}
             onNewSession={handleRecreateSkillAssistant}
             showHeader={false}
             userAvatar={profile?.avatar || undefined}

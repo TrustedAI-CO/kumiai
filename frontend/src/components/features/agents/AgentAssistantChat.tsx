@@ -134,6 +134,13 @@ export function AgentAssistantChat({
             className="h-full"
             readOnly={false}
             onAutoSave={handleAutoSave}
+            onMessageComplete={() => {
+              // Refresh agents list when assistant finishes responding
+              // This catches agent creation/modification via file tools
+              if (onAgentUpdated) {
+                onAgentUpdated();
+              }
+            }}
             onNewSession={handleRecreateAgentAssistant}
             showHeader={false}
             userAvatar={profile?.avatar || undefined}

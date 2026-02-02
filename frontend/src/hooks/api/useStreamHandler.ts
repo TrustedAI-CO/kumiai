@@ -56,6 +56,7 @@ interface UseStreamHandlerOptions {
   addToolUse: (toolUseId: string, toolName: string, toolInput: any, responseId?: string, agentId?: string, agentName?: string) => void;
   addToolComplete: (toolUseId: string, result?: string, isError?: boolean) => void;
   onAutoSave?: (type: 'skill' | 'agent', id: string) => void;
+  onMessageComplete?: () => void;
   setIsSending: (isSending: boolean) => void;
   setError: (error: string | null) => void;
   setQueueSize: (size: number) => void;
@@ -72,6 +73,7 @@ export function useStreamHandler({
   addToolUse,
   addToolComplete,
   onAutoSave,
+  onMessageComplete,
   setIsSending,
   setError,
   setQueueSize,
@@ -148,6 +150,10 @@ export function useStreamHandler({
           // Only set isSending to false if no more messages are queued
           if (!hasMoreMessages) {
             setIsSending(false);
+            // Notify that message processing is complete (used by skill/agent assistants to refresh lists)
+            if (onMessageComplete) {
+              onMessageComplete();
+            }
           }
           break;
 
@@ -215,7 +221,7 @@ export function useStreamHandler({
           break;
       }
     },
-    [appendToAssistant, completeAssistantMessage, startAssistantMessage, addIncomingUserMessage, addToolUse, addToolComplete, onAutoSave, setIsSending, setError, setQueueSize, setQueuedMessages, loadFromDB, instanceId]
+    [appendToAssistant, completeAssistantMessage, startAssistantMessage, addIncomingUserMessage, addToolUse, addToolComplete, onAutoSave, onMessageComplete, setIsSending, setError, setQueueSize, setQueuedMessages, loadFromDB, instanceId]
   );
 
   return handleStreamEvent;
