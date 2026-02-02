@@ -50,7 +50,10 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
           // Sanitize SVG before injection to prevent XSS attacks
           // Even though Mermaid has securityLevel: 'strict', defense in depth is important
           const cleanSvg = DOMPurify.sanitize(svg, {
-            USE_PROFILES: { svg: true, svgFilters: true }
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['foreignObject'], // Allow foreignObject for text wrapping
+            ADD_ATTR: ['target', 'xlink:href', 'xmlns:xlink'], // Allow links and namespaces
+            KEEP_CONTENT: true // Preserve text content
           });
           containerRef.current.innerHTML = cleanSvg;
         }
@@ -126,9 +129,9 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
 
   return (
     <>
-      <div className={`relative group ${className}`}>
-        {/* Action Buttons - shown on hover at right side */}
-        <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={`relative ${className}`}>
+        {/* Action Buttons - always visible at right side */}
+        <div className="absolute top-2 right-2 z-10 flex gap-1">
           <button
             onClick={handleOpenModal}
             className="p-1.5 bg-white/90 hover:bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 transition-colors"
