@@ -141,7 +141,7 @@ interface MessageBubbleProps {
   userAvatar?: string; // User profile avatar (base64 or URL)
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, role, agents, isTyping = false, userAvatar, onSessionJump }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, role, agents, isTyping = false, userAvatar, onSessionJump, sessionId }: MessageBubbleProps) {
   // Get display info for assistant messages
   const displayInfo = message.role === 'assistant'
     ? getMessageSenderDisplayInfo(message.agent_id, message.agent_name, agents)
