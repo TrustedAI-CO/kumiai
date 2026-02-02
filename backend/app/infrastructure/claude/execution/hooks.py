@@ -454,6 +454,83 @@ async def user_prompt_submit_hook(
     return {}
 
 
+# Delay for tool completion before interrupting (in seconds)
+TOOL_COMPLETION_DELAY_SEC = 1.0
+
+
+async def ask_user_question_pre_hook(
+    input_data: Dict[str, Any], tool_use_id: str, context: Any
+) -> Dict[str, Any]:
+    """
+    Hook: PreToolUse for askuserquestion
+    Fires BEFORE AskUserQuestion tool executes.
+
+    Allows the tool to execute (so questions are sent to frontend),
+    then schedules interrupt after tool completes.
+    """
+    tool_name = input_data.get("tool_name", "")
+
+    if tool_name == "AskUserQuestion":
+        session_id = input_data.get("session_id")
+        logger.info(f"[ASK_USER] AskUserQuestion detected for session {session_id}")
+
+        # Allow the tool to execute first (so questions reach the frontend)
+        response = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+            }
+        }
+
+        # Schedule interrupt to happen after tool completes
+        import asyncio
+
+        execution = await _get_or_register_execution(session_id)
+        if execution:
+
+            async def interrupt_after_delay():
+                # Delay to let tool complete and avoid race condition
+                logger.info(
+                    f"[ASK_USER] Starting {TOOL_COMPLETION_DELAY_SEC}s delay for {session_id}"
+                )
+                await asyncio.sleep(TOOL_COMPLETION_DELAY_SEC)
+                logger.info(
+                    f"[ASK_USER] Delay complete, attempting interrupt for {session_id}"
+                )
+                try:
+                    await execution.client.interrupt()
+                    logger.info(f"[ASK_USER] Interrupt call completed for {session_id}")
+
+                    # Update session status to IDLE
+                    execution.is_processing = False
+                    from app.infrastructure.claude.state.session_status_manager import (
+                        session_status_manager,
+                    )
+
+                    await session_status_manager.reset_to_idle(execution.session_id)
+                    logger.info(
+                        f"[ASK_USER] Session {session_id} interrupted and set to IDLE"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"[ASK_USER] Failed to interrupt session {session_id}: {e}",
+                        exc_info=True,
+                    )
+
+            # Create task with exception handling
+            def handle_task_done(task):
+                if not task.cancelled() and task.exception():
+                    logger.error(f"Interrupt task failed: {task.exception()}")
+
+            task = asyncio.create_task(interrupt_after_delay())
+            task.add_done_callback(handle_task_done)
+
+        return response
+
+    return {}
+
+
 async def stop_hook(
     input_data: Dict[str, Any], tool_use_id: str, context: Any
 ) -> Dict[str, Any]:

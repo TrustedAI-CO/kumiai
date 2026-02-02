@@ -15,6 +15,7 @@ import { EditWidget } from './EditWidget';
 import { TodoWriteWidget } from './TodoWriteWidget';
 import { ContactPMWidget } from './ContactPMWidget';
 import { ShowFileWidget } from './ShowFileWidget';
+import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 import { DefaultToolWidget } from './DefaultToolWidget';
 
 // TODO: Extract these complex widgets from old ToolWidgets.tsx
@@ -85,6 +86,14 @@ const widgetRegistry: WidgetRegistryEntry[] = [
   {
     matcher: (name) => name === 'todowrite',
     component: TodoWriteWidget
+  },
+
+  // AskUserQuestion tool
+  {
+    matcher: (name) =>
+      name === 'askuserquestion' ||
+      name === 'mcp__common_tools__askuserquestion',
+    component: AskUserQuestionWidget
   },
 
   // Communication tools

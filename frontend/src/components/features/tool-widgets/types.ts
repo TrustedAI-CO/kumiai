@@ -8,6 +8,8 @@ export interface ToolWidgetProps {
   toolId?: string;
   result?: any;
   isLoading?: boolean;
+  sessionId?: string;
+  isLatestMessage?: boolean; // Whether this is the most recent message in the conversation
 }
 
 export interface ParsedResult {

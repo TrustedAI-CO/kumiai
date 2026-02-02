@@ -23,9 +23,11 @@ interface MessageGroupProps {
   agentAvatar: string;
   agents: Agent[];
   onSessionJump?: (sessionId: string) => void;
+  sessionId?: string;
+  isLatestGroup?: boolean; // Whether this is the latest message group in the conversation
 }
 
-export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, onSessionJump }: MessageGroupProps) {
+export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, onSessionJump, sessionId, isLatestGroup }: MessageGroupProps) {
   if (messages.length === 0) return null;
 
   // Get display info from first message
@@ -92,6 +94,8 @@ export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, 
                 );
               } else if (msg.role === 'tool') {
                 // Tool use - render using widget system
+                // Only the last tool message in the latest group is considered "latest"
+                const isLastToolInGroup = index === messages.length - 1;
                 return (
                   <div key={msg.id || index}>
                     {renderToolWidget({
@@ -100,6 +104,8 @@ export function MessageGroup({ messages, role, agentColor, agentAvatar, agents, 
                       toolId: msg.toolId,
                       result: msg.toolResult,
                       isLoading: !msg.toolResult && !msg.toolError, // Loading if no result yet
+                      sessionId,
+                      isLatestMessage: isLatestGroup && isLastToolInGroup,
                     })}
                   </div>
                 );

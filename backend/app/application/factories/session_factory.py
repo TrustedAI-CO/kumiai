@@ -89,11 +89,9 @@ class SessionFactory:
             NotFoundError: If agent/skill not found
         """
         # Validate configuration
-        logger.info(f"SessionFactory.create_session called for {session_type.value}")
         await self._validate_configuration(session_type, agent_id, project_id)
 
         # Build context
-        logger.info(f"Building context for {session_type.value}")
         build_context = SessionBuildContext(
             session_type=session_type,
             instance_id=instance_id,
@@ -106,11 +104,8 @@ class SessionFactory:
         )
 
         # Route to appropriate builder
-        logger.info(f"Getting builder for {session_type.value}")
         builder = self._get_builder(session_type)
-        logger.info(f"Calling builder.build_options() for {session_type.value}")
         options = await builder.build_options(build_context)
-        logger.info(f"Builder returned options for {session_type.value}")
 
         # Create Session entity
         from app.domain.value_objects import SessionStatus

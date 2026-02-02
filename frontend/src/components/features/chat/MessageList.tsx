@@ -121,6 +121,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   return (
     <>
       {grouped.map((item, index) => {
+        const isLatest = index === grouped.length - 1;
+
         // Single message (user)
         if (!Array.isArray(item)) {
           return (
@@ -148,6 +150,8 @@ export const MessageList: React.FC<MessageListProps> = ({
             agentAvatar={agentAvatar || 'default-avatar'}
             agents={agents}
             onSessionJump={onSessionJump}
+            sessionId={instanceId}
+            isLatestGroup={isLatest}
           />
         );
       })}

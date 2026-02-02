@@ -99,7 +99,7 @@ function FileAttachmentsDisplay({ files }: { files: StructuredFileAttachment[] }
 }
 
 // Tool call bubble component (for role='tool' messages)
-function ToolCallBubble({ message }: { message: Message }) {
+function ToolCallBubble({ message, sessionId }: { message: Message; sessionId?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -112,6 +112,7 @@ function ToolCallBubble({ message }: { message: Message }) {
         toolId: message.toolId,
         result: message.toolResult,
         isLoading: !message.toolResult && !message.toolError, // Loading if no result yet
+        sessionId,
       })}
     </motion.div>
   );
@@ -324,7 +325,7 @@ export const MessageBubble = memo(function MessageBubble({ message, role, agents
   }
 
   if (message.role === 'tool') {
-    return <ToolCallBubble message={message} />;
+    return <ToolCallBubble message={message} sessionId={sessionId} />;
   }
 
   if (message.role === 'system') {

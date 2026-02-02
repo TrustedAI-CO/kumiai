@@ -94,6 +94,7 @@ class SpecialistSessionBuilder(SessionBuilder):
             user_prompt_submit_hook,
             stop_hook,
             inject_session_context_hook,
+            ask_user_question_pre_hook,
         )
         from claude_agent_sdk import HookMatcher
 
@@ -113,6 +114,11 @@ class SpecialistSessionBuilder(SessionBuilder):
                     HookMatcher(
                         matcher=".*common_tools__(contact_instance|get_session_info).*",
                         hooks=[inject_session_context_hook],
+                    ),
+                    # Interrupt for AskUserQuestion
+                    HookMatcher(
+                        matcher="AskUserQuestion",
+                        hooks=[ask_user_question_pre_hook],
                     ),
                 ],
                 "UserPromptSubmit": [HookMatcher(hooks=[user_prompt_submit_hook])],
