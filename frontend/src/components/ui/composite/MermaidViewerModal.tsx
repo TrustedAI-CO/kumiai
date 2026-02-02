@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { X, Download, Maximize2, Minimize2, Network } from 'lucide-react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
+import { exportMermaidToPNG } from '@/lib/utils/mermaidExport';
 
 interface MermaidViewerModalProps {
   chart: string;
@@ -11,7 +13,7 @@ interface MermaidViewerModalProps {
 export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }: MermaidViewerModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [id] = useState(() => `mermaid-modal-${Math.random().toString(36).substr(2, 9)}`);
+  const [id] = useState(() => `mermaid-modal-${Math.random().toString(36).substring(2, 11)}`);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [scale, setScale] = useState(1);
 
@@ -40,11 +42,15 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
         // Clear previous content
         containerRef.current.innerHTML = '';
 
-        // Render the diagram
+        // Render the diagram with Mermaid (securityLevel: 'strict' configured at init)
         const { svg } = await mermaid.render(id, chart);
 
         if (containerRef.current) {
-          containerRef.current.innerHTML = svg;
+          // Sanitize SVG before injection to prevent XSS attacks
+          const cleanSvg = DOMPurify.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true }
+          });
+          containerRef.current.innerHTML = cleanSvg;
 
           // Make SVG responsive and larger
           const svgElement = containerRef.current.querySelector('svg');
@@ -61,6 +67,18 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
     };
 
     renderDiagram();
+
+    // Cleanup: Remove Mermaid's internal state when unmounting
+    return () => {
+      try {
+        const element = document.getElementById(id);
+        if (element) {
+          element.remove();
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    };
   }, [chart, id]);
 
   const handleDownloadPNG = async () => {
@@ -70,80 +88,11 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
     if (!svgElement) return;
 
     try {
-      // Clone the SVG to avoid modifying the original
-      const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
-
-      // Ensure proper namespace
-      clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-
-      // Get SVG dimensions
-      const viewBox = clonedSvg.getAttribute('viewBox');
-      let width: number, height: number;
-
-      if (viewBox) {
-        const parts = viewBox.split(' ');
-        width = parseFloat(parts[2]);
-        height = parseFloat(parts[3]);
-      } else {
-        width = parseFloat(clonedSvg.getAttribute('width') || '800');
-        height = parseFloat(clonedSvg.getAttribute('height') || '600');
-      }
-
-      // Set explicit dimensions
-      clonedSvg.setAttribute('width', width.toString());
-      clonedSvg.setAttribute('height', height.toString());
-
-      // Create a canvas
-      const canvas = document.createElement('canvas');
-      const scaleFactor = 2; // Higher quality
-      canvas.width = width * scaleFactor;
-      canvas.height = height * scaleFactor;
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) return;
-
-      // Serialize the SVG to data URL
-      const svgData = new XMLSerializer().serializeToString(clonedSvg);
-      const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-
-      const img = new Image();
-      img.onload = () => {
-        try {
-          // Fill white background
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Scale and draw the image
-          ctx.scale(scaleFactor, scaleFactor);
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Convert to PNG and download
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const downloadUrl = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = downloadUrl;
-              a.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(downloadUrl);
-            }
-          }, 'image/png');
-        } catch (err) {
-          console.error('Failed to convert to PNG:', err);
-          alert('Failed to export diagram as PNG. Please try again.');
-        }
-      };
-
-      img.onerror = (err) => {
-        console.error('Failed to load SVG as image:', err);
-        alert('Failed to export diagram as PNG. Please try again.');
-      };
-
-      img.src = svgDataUrl;
+      const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
+      await exportMermaidToPNG(svgElement, filename);
     } catch (err) {
       console.error('Failed to export PNG:', err);
+      // TODO: Replace with toast notification for better UX
       alert('Failed to export diagram as PNG. Please try again.');
     }
   };
@@ -188,6 +137,7 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
             <button
               onClick={handleZoomOut}
               className="px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              aria-label="Zoom out"
               title="Zoom out"
             >
               −
@@ -195,6 +145,7 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
             <button
               onClick={handleResetZoom}
               className="px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              aria-label="Reset zoom to 100%"
               title="Reset zoom"
             >
               {Math.round(scale * 100)}%
@@ -202,31 +153,35 @@ export function MermaidViewerModal({ chart, title = 'Mermaid Diagram', onClose }
             <button
               onClick={handleZoomIn}
               className="px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              aria-label="Zoom in"
               title="Zoom in"
             >
               +
             </button>
-            <div className="w-px h-6 bg-gray-200" />
+            <div className="w-px h-6 bg-gray-200" aria-hidden="true" />
             <button
               onClick={toggleFullscreen}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label={isFullscreen ? 'Exit fullscreen mode' : 'Enter fullscreen mode'}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             >
-              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              {isFullscreen ? <Minimize2 className="w-5 h-5" aria-hidden="true" /> : <Maximize2 className="w-5 h-5" aria-hidden="true" />}
             </button>
             <button
               onClick={handleDownloadPNG}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Download diagram as PNG image"
               title="Download PNG"
             >
-              <Download className="w-5 h-5" />
+              <Download className="w-5 h-5" aria-hidden="true" />
             </button>
             <button
               onClick={onClose}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Close modal"
               title="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>

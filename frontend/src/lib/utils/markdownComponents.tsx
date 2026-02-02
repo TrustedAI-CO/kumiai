@@ -26,7 +26,7 @@ export const markdownComponents: Components = {
       {children}
     </blockquote>
   ),
-  code: ({ className, children, ...props }: any) => {
+  code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
     const isInline = !className?.includes('language-');
 
     if (isInline) {

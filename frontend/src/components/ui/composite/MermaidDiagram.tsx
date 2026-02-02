@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 import { Eye, Download } from 'lucide-react';
 import { MermaidViewerModal } from './MermaidViewerModal';
+import { exportMermaidToPNG } from '@/lib/utils/mermaidExport';
 
 interface MermaidDiagramProps {
   chart: string;
@@ -14,7 +16,7 @@ let mermaidInitialized = false;
 export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: MermaidDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [id] = useState(() => `mermaid-${Math.random().toString(36).substr(2, 9)}`);
+  const [id] = useState(() => `mermaid-${Math.random().toString(36).substring(2, 11)}`);
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
@@ -41,11 +43,16 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
         // Clear previous content
         containerRef.current.innerHTML = '';
 
-        // Render the diagram
+        // Render the diagram with Mermaid (securityLevel: 'strict' configured at init)
         const { svg } = await mermaid.render(id, chart);
 
         if (containerRef.current) {
-          containerRef.current.innerHTML = svg;
+          // Sanitize SVG before injection to prevent XSS attacks
+          // Even though Mermaid has securityLevel: 'strict', defense in depth is important
+          const cleanSvg = DOMPurify.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true }
+          });
+          containerRef.current.innerHTML = cleanSvg;
         }
       } catch (err) {
         console.error('Mermaid render error:', err);
@@ -54,6 +61,18 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
     };
 
     renderDiagram();
+
+    // Cleanup: Remove Mermaid's internal state for this diagram when unmounting
+    return () => {
+      try {
+        const element = document.getElementById(id);
+        if (element) {
+          element.remove();
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    };
   }, [chart, id]);
 
   const handleDownloadPNG = async (e: React.MouseEvent) => {
@@ -65,80 +84,11 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
     if (!svgElement) return;
 
     try {
-      // Clone the SVG to avoid modifying the original
-      const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
-
-      // Ensure proper namespace
-      clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-
-      // Get SVG dimensions
-      const viewBox = clonedSvg.getAttribute('viewBox');
-      let width: number, height: number;
-
-      if (viewBox) {
-        const parts = viewBox.split(' ');
-        width = parseFloat(parts[2]);
-        height = parseFloat(parts[3]);
-      } else {
-        width = parseFloat(clonedSvg.getAttribute('width') || '800');
-        height = parseFloat(clonedSvg.getAttribute('height') || '600');
-      }
-
-      // Set explicit dimensions
-      clonedSvg.setAttribute('width', width.toString());
-      clonedSvg.setAttribute('height', height.toString());
-
-      // Create a canvas
-      const canvas = document.createElement('canvas');
-      const scaleFactor = 2; // Higher quality
-      canvas.width = width * scaleFactor;
-      canvas.height = height * scaleFactor;
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) return;
-
-      // Serialize the SVG to data URL
-      const svgData = new XMLSerializer().serializeToString(clonedSvg);
-      const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-
-      const img = new Image();
-      img.onload = () => {
-        try {
-          // Fill white background
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Scale and draw the image
-          ctx.scale(scaleFactor, scaleFactor);
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Convert to PNG and download
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const downloadUrl = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = downloadUrl;
-              a.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(downloadUrl);
-            }
-          }, 'image/png');
-        } catch (err) {
-          console.error('Failed to convert to PNG:', err);
-          alert('Failed to export diagram as PNG. Please try again.');
-        }
-      };
-
-      img.onerror = (err) => {
-        console.error('Failed to load SVG as image:', err);
-        alert('Failed to export diagram as PNG. Please try again.');
-      };
-
-      img.src = svgDataUrl;
+      const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
+      await exportMermaidToPNG(svgElement, filename);
     } catch (err) {
       console.error('Failed to export PNG:', err);
+      // TODO: Replace with toast notification for better UX
       alert('Failed to export diagram as PNG. Please try again.');
     }
   };
@@ -182,16 +132,18 @@ export function MermaidDiagram({ chart, className = '', title = 'Diagram' }: Mer
           <button
             onClick={handleOpenModal}
             className="p-1.5 bg-white/90 hover:bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 transition-colors"
+            aria-label="View diagram in fullscreen"
             title="View fullscreen"
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-4 h-4" aria-hidden="true" />
           </button>
           <button
             onClick={handleDownloadPNG}
             className="p-1.5 bg-white/90 hover:bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 transition-colors"
+            aria-label="Download diagram as PNG"
             title="Download as PNG"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
