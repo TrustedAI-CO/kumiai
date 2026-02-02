@@ -25,7 +25,7 @@ Project-level multi-agent system powered by Claude. Build AI teams that collabor
 ### Prerequisites
 
 - **Python 3.11+** (required for asyncio.timeout)
-- Node.js 18+
+- **Node.js 20+** (required by react-router, pdfjs-dist)
 - Claude API key (logged in via Claude Code)
 
 ### Installation
