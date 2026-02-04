@@ -144,6 +144,29 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(({
     }
   };
 
+  // Paste handler for images
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imagesToAdd: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imagesToAdd.push(file);
+        }
+      }
+    }
+
+    if (imagesToAdd.length > 0) {
+      e.preventDefault(); // Prevent default paste behavior
+      await addFiles(imagesToAdd);
+    }
+  };
+
   const handleContainerClick = (e: React.MouseEvent) => {
     // Focus textarea when clicking anywhere in the input container
     // Exclude clicks on buttons and other interactive elements
@@ -259,6 +282,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(({
               value={value}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               placeholder={placeholder}
