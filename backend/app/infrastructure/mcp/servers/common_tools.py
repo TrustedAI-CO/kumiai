@@ -372,28 +372,33 @@ async def contact_pm(args: Dict[str, Any]) -> Dict[str, Any]:
         if not message:
             return _error("message is required")
 
-        # Get current session info from context
-        from app.infrastructure.mcp.servers.context import get_current_session_info
-
-        sender_info = get_current_session_info()
-        if not sender_info:
-            return _error("Unable to determine current session context")
-
-        source_instance_id_str = sender_info.get("source_instance_id")
-        project_id_str = sender_info.get("project_id")
+        # Get sender instance info from injected parameters
+        # These are auto-injected by the inject_session_context_hook
+        source_instance_id_str = args.get("source_instance_id", "")
+        project_id_str = args.get("project_id", "")
 
         if not source_instance_id_str:
-            return _error("Unable to determine source instance ID")
+            logger.error(
+                "[COMMON_TOOLS] No source_instance_id available, cannot send message without attribution"
+            )
+            return _error(
+                "Could not determine sender instance. The inject_session_context_hook should have provided this."
+            )
 
         if not project_id_str:
-            return _error("This session is not associated with a project")
+            return _error(
+                "Could not determine project context. The inject_session_context_hook should have provided this."
+            )
 
         # Parse UUIDs
         try:
             source_instance_id = UUID(source_instance_id_str)
             project_id = UUID(project_id_str)
+            logger.debug(
+                f"[COMMON_TOOLS] Got source_instance_id={source_instance_id} and project_id={project_id} from hook injection"
+            )
         except ValueError as e:
-            return _error(f"Invalid UUID format in session context: {e}")
+            return _error(f"Invalid UUID format in injected parameters: {e}")
 
         # Find the latest PM session in this project
         from app.infrastructure.database.connection import get_repository_session

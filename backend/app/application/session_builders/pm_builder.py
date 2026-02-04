@@ -122,7 +122,7 @@ class PMSessionBuilder(SessionBuilder):
                     ),
                     # Also inject for common_tools that need session context
                     HookMatcher(
-                        matcher=".*common_tools__(contact_instance|get_session_info).*",
+                        matcher=".*common_tools__(contact_instance|contact_pm|get_session_info).*",
                         hooks=[inject_session_context_hook],
                     ),
                     # Interrupt for AskUserQuestion

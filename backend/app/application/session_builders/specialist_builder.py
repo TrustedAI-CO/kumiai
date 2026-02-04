@@ -112,7 +112,7 @@ class SpecialistSessionBuilder(SessionBuilder):
                 "PreToolUse": [
                     # Auto-inject project_id and source_instance_id for common_tools
                     HookMatcher(
-                        matcher=".*common_tools__(contact_instance|get_session_info).*",
+                        matcher=".*common_tools__(contact_instance|contact_pm|get_session_info).*",
                         hooks=[inject_session_context_hook],
                     ),
                     # Interrupt for AskUserQuestion
