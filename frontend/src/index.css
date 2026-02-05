@@ -228,11 +228,12 @@
     }
   }
 
-  /* Hide Mermaid error SVG elements */
-  .mermaid-diagram .error-icon,
-  .mermaid-diagram .error-text,
-  .mermaid-diagram svg:has(.error-icon),
-  .mermaid-diagram svg:has(.error-text) {
+  /* Hide Mermaid error SVG elements globally */
+  .error-icon,
+  .error-text,
+  svg:has(.error-icon),
+  svg:has(.error-text),
+  div[id^="dmermaid-"] {
     display: none !important;
   }
 }
