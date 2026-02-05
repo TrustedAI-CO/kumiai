@@ -233,7 +233,8 @@
   .error-text,
   svg:has(.error-icon),
   svg:has(.error-text),
-  div[id^="dmermaid-"] {
+  div[id^="dmermaid-"]:has(.error-icon),
+  div[id^="dmermaid-"]:has(.error-text) {
     display: none !important;
   }
 }
