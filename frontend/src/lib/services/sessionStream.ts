@@ -92,6 +92,7 @@ export function openSessionStream({
     try {
       const response = await fetch(apiUrl(`/api/v1/sessions/${instanceId}/stream`), {
         method: 'GET',
+        credentials: 'include',
         headers: {
           Accept: 'text/event-stream',
         },

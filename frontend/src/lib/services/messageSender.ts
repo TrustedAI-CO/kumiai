@@ -27,6 +27,7 @@ export async function sendMessage({
   try {
     const response = await fetch(apiUrl(`/api/v1/sessions/${instanceId}/enqueue`), {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
