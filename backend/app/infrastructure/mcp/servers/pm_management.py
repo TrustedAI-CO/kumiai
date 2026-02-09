@@ -77,7 +77,7 @@ async def spawn_instance(args: Dict[str, Any]) -> Dict[str, Any]:
 
         if not agent:
             # Get list of available agents to help PM
-            available_agents = await agent_repo.list()
+            available_agents = await agent_repo.get_all()
             available_agent_ids = [a.id for a in available_agents]
 
             error_msg = f"Agent '{agent_id}' not found. Available agents: {', '.join(repr(aid) for aid in available_agent_ids)}"
