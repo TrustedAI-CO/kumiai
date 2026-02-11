@@ -13,6 +13,7 @@ from app.application.services import (
     UserProfileService,
 )
 from app.application.services.agent_service import AgentService
+from app.application.services.credential_service import CredentialService
 from app.core.config import settings
 from app.core.dependencies import get_db
 from app.infrastructure.database.repositories import (
@@ -213,6 +214,7 @@ def get_claude_client_manager(
             agent_repo=agent_repo,
             skill_repo=skill_repo,
             config=settings,
+            credential_service=CredentialService(),
         )
     return _claude_client_manager
 

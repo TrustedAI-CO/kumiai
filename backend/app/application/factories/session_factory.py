@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from claude_agent_sdk import ClaudeAgentOptions
@@ -36,6 +36,7 @@ class SessionFactory:
         self,
         agent_repository: AgentRepository,
         skill_repository: SkillRepository,
+        credential_service: Optional[Any] = None,
     ):
         """
         Initialize session factory.
@@ -43,10 +44,12 @@ class SessionFactory:
         Args:
             agent_repository: Repository for loading agents
             skill_repository: Repository for loading skills
+            credential_service: Service for fetching provider credentials
         """
         # Initialize loaders
         self.agent_loader = AgentLoader(agent_repository)
         self.skill_loader = SkillLoader(skill_repository)
+        self._credential_service = credential_service
 
         # Initialize builders
         self.pm_builder = PMSessionBuilder(self.agent_loader, self.skill_loader)
@@ -91,6 +94,11 @@ class SessionFactory:
         # Validate configuration
         await self._validate_configuration(session_type, agent_id, project_id)
 
+        # Fetch provider environment variables (AWS Bedrock credentials etc.)
+        provider_env = {}
+        if self._credential_service:
+            provider_env = await self._credential_service.get_provider_env()
+
         # Build context
         build_context = SessionBuildContext(
             session_type=session_type,
@@ -101,6 +109,7 @@ class SessionFactory:
             project_path=project_path,
             model=model,
             resume_session_id=resume_session_id,
+            provider_env=provider_env,
         )
 
         # Route to appropriate builder
