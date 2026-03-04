@@ -21,7 +21,7 @@ export function ProjectModal({ project, onSave, onClose }: ProjectModalProps) {
     name: project?.name || '',
     description: project?.description || '',
     pm_id: project?.pm_agent_id || '',
-    team_member_ids: project?.pm_agent_id ? [project.pm_agent_id] : [],
+    team_member_ids: project?.team_member_ids || [],
     path: project?.path || '',
   });
   const [agents, setAgents] = useState<Agent[]>([]);
