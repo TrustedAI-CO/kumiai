@@ -76,10 +76,32 @@ async def health_check(db: AsyncSession = Depends(get_db_session)) -> dict:
         settings.anthropic_api_key
         and settings.anthropic_api_key != "your_anthropic_api_key_here"
     )
+
+    # Check if Bedrock credentials are configured via user settings
+    bedrock_configured = False
+    active_provider = "anthropic"
+    try:
+        from app.application.services.credential_service import CredentialService
+
+        cred_service = CredentialService()
+        provider_env = await cred_service.get_provider_env()
+        if provider_env.get("AWS_ACCESS_KEY_ID"):
+            bedrock_configured = True
+            active_provider = "bedrock"
+        elif provider_env.get("ANTHROPIC_API_KEY"):
+            api_key_configured = True
+    except Exception:
+        pass
+
     health_status["checks"]["api_key"] = {
-        "status": "configured" if api_key_configured else "missing",
+        "status": (
+            "configured" if (api_key_configured or bedrock_configured) else "missing"
+        ),
+        "provider": active_provider,
+        "anthropic_configured": api_key_configured,
+        "bedrock_configured": bedrock_configured,
     }
-    if not api_key_configured:
+    if not api_key_configured and not bedrock_configured:
         health_status["status"] = "degraded"
 
     # Check database connection pool status

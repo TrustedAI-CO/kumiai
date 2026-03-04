@@ -154,6 +154,9 @@ class AssistantSessionBuilder(SessionBuilder):
             },
         }
 
+        # Add provider environment variables (AWS Bedrock etc.)
+        self._add_provider_env(options_dict, context.provider_env)
+
         # Add resume if present
         self._add_resume_if_present(options_dict, context.resume_session_id)
 

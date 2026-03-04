@@ -44,6 +44,9 @@ class SessionBuildContext:
     # Resume configuration
     resume_session_id: Optional[str] = None
 
+    # Provider environment variables (AWS Bedrock credentials etc.)
+    provider_env: Dict[str, str] = field(default_factory=dict)
+
     # Additional context
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -209,6 +212,23 @@ class SessionBuilder(ABC):
         )
 
         return mcp_servers
+
+    def _add_provider_env(
+        self, options_dict: Dict[str, Any], provider_env: Dict[str, str]
+    ) -> None:
+        """
+        Add provider environment variables to options dict.
+
+        Args:
+            options_dict: Options dictionary to modify
+            provider_env: Environment variables for the provider (e.g., AWS credentials)
+        """
+        if provider_env:
+            options_dict["env"] = provider_env
+            logger.info(
+                f"Provider env added: {len(provider_env)} vars "
+                f"(keys: {list(provider_env.keys())})"
+            )
 
     def _add_resume_if_present(
         self, options_dict: Dict[str, Any], resume_session_id: Optional[str]

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api, UserProfile as UserProfileType } from '@/lib/api';
-import { User, Save, Upload, X, Settings, AlertTriangle } from 'lucide-react';
+import { api, UserProfile as UserProfileType, CredentialsConfigResponse } from '@/lib/api';
+import { User, Save, Upload, X, Settings, AlertTriangle, Key, Cloud, Check } from 'lucide-react';
 import { Button } from '@/components/ui/primitives/button';
 import { Textarea } from '@/components/ui/primitives/textarea';
 import { LoadingState, StandardModal } from '@/components/ui';
@@ -28,9 +28,23 @@ export function PreferencesModal({ isOpen, onClose, initialTab = 'profile' }: Pr
   const [isResetting, setIsResetting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Credentials state
+  const [credConfig, setCredConfig] = useState<CredentialsConfigResponse | null>(null);
+  const [credProvider, setCredProvider] = useState<'anthropic' | 'bedrock'>('anthropic');
+  const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [awsCredentialsText, setAwsCredentialsText] = useState('');
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState('');
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('');
+  const [awsSessionToken, setAwsSessionToken] = useState('');
+  const [awsRegion, setAwsRegion] = useState('us-east-1');
+  const [credSaving, setCredSaving] = useState(false);
+  const [credSaveSuccess, setCredSaveSuccess] = useState(false);
+  const [credParseError, setCredParseError] = useState('');
+
   useEffect(() => {
     if (isOpen) {
       loadProfile();
+      loadCredentials();
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
@@ -51,6 +65,105 @@ export function PreferencesModal({ isOpen, onClose, initialTab = 'profile' }: Pr
       console.error('Failed to load user profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCredentials = async () => {
+    try {
+      const data = await api.getCredentialsConfig();
+      setCredConfig(data);
+      setCredProvider(data.provider as 'anthropic' | 'bedrock');
+      setAwsRegion(data.aws_region || 'us-east-1');
+    } catch (error) {
+      console.error('Failed to load credentials config:', error);
+    }
+  };
+
+  const parseAwsCredentialsBlock = (text: string) => {
+    setAwsCredentialsText(text);
+    setCredParseError('');
+
+    const lines = text.trim().split('\n');
+    const result: Record<string, string> = {};
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) continue;
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex === -1) continue;
+
+      const key = trimmed.substring(0, eqIndex).trim();
+      const value = trimmed.substring(eqIndex + 1).trim();
+      result[key] = value;
+    }
+
+    if (result.aws_access_key_id) {
+      setAwsAccessKeyId(result.aws_access_key_id);
+    }
+    if (result.aws_secret_access_key) {
+      setAwsSecretAccessKey(result.aws_secret_access_key);
+    }
+    if (result.aws_session_token) {
+      setAwsSessionToken(result.aws_session_token);
+    }
+
+    if (text.trim() && !result.aws_access_key_id && !result.aws_secret_access_key) {
+      setCredParseError('Could not parse credentials. Expected aws_access_key_id and aws_secret_access_key.');
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    try {
+      setCredSaving(true);
+      setCredSaveSuccess(false);
+
+      const req: any = { provider: credProvider };
+
+      if (credProvider === 'anthropic' && anthropicApiKey) {
+        req.anthropic_api_key = anthropicApiKey;
+      }
+
+      if (credProvider === 'bedrock') {
+        if (!awsAccessKeyId || !awsSecretAccessKey) {
+          alert('AWS Access Key ID and Secret Access Key are required for Bedrock.');
+          setCredSaving(false);
+          return;
+        }
+        req.aws_credentials = {
+          aws_access_key_id: awsAccessKeyId,
+          aws_secret_access_key: awsSecretAccessKey,
+          aws_session_token: awsSessionToken || undefined,
+          aws_region: awsRegion,
+        };
+      }
+
+      const result = await api.saveCredentialsConfig(req);
+      setCredConfig(result);
+      setCredSaveSuccess(true);
+      setTimeout(() => setCredSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save credentials:', error);
+      alert('Failed to save credentials configuration.');
+    } finally {
+      setCredSaving(false);
+    }
+  };
+
+  const handleClearCredentials = async () => {
+    if (!confirm('Clear all stored credentials?')) return;
+    try {
+      await api.clearCredentials();
+      setAnthropicApiKey('');
+      setAwsAccessKeyId('');
+      setAwsSecretAccessKey('');
+      setAwsSessionToken('');
+      setAwsCredentialsText('');
+      setCredProvider('anthropic');
+      await loadCredentials();
+    } catch (error) {
+      console.error('Failed to clear credentials:', error);
     }
   };
 
@@ -243,6 +356,201 @@ export function PreferencesModal({ isOpen, onClose, initialTab = 'profile' }: Pr
 
                 {activeTab === 'settings' && (
                   <div className="space-y-6">
+                    {/* API Configuration Section */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Key className="w-4 h-4" />
+                        API Configuration
+                      </h4>
+
+                      {/* Provider Toggle */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Provider
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setCredProvider('anthropic')}
+                            className={cn(
+                              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                              credProvider === 'anthropic'
+                                ? 'bg-gray-900 text-white border-gray-900'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            )}
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            Anthropic Direct
+                          </button>
+                          <button
+                            onClick={() => setCredProvider('bedrock')}
+                            className={cn(
+                              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                              credProvider === 'bedrock'
+                                ? 'bg-gray-900 text-white border-gray-900'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            )}
+                          >
+                            <Cloud className="w-3.5 h-3.5" />
+                            AWS Bedrock
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Anthropic Direct Fields */}
+                      {credProvider === 'anthropic' && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Anthropic API Key
+                            </label>
+                            <input
+                              type="password"
+                              value={anthropicApiKey}
+                              onChange={(e) => setAnthropicApiKey(e.target.value)}
+                              placeholder={credConfig?.anthropic_api_key_masked || 'sk-ant-...'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Leave empty to use the ANTHROPIC_API_KEY environment variable.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AWS Bedrock Fields */}
+                      {credProvider === 'bedrock' && (
+                        <div className="space-y-3">
+                          {/* Paste Textarea */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Paste AWS Credentials
+                            </label>
+                            <Textarea
+                              value={awsCredentialsText}
+                              onChange={(e) => parseAwsCredentialsBlock(e.target.value)}
+                              placeholder={'[profile_name]\naws_access_key_id=AKIA...\naws_secret_access_key=...\naws_session_token=...'}
+                              className="font-mono text-xs resize-none"
+                              rows={4}
+                            />
+                            {credParseError && (
+                              <p className="text-xs text-red-500 mt-1">{credParseError}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              Paste your AWS credentials block. Fields below will be auto-filled.
+                            </p>
+                          </div>
+
+                          {/* Individual Fields */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              AWS Access Key ID
+                            </label>
+                            <input
+                              type="text"
+                              value={awsAccessKeyId}
+                              onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                              placeholder={credConfig?.aws_access_key_id_masked || 'AKIA...'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              AWS Secret Access Key
+                            </label>
+                            <input
+                              type="password"
+                              value={awsSecretAccessKey}
+                              onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                              placeholder="Enter secret access key"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              AWS Session Token <span className="text-gray-400">(optional)</span>
+                            </label>
+                            <input
+                              type="password"
+                              value={awsSessionToken}
+                              onChange={(e) => setAwsSessionToken(e.target.value)}
+                              placeholder="Enter session token"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              AWS Region
+                            </label>
+                            <select
+                              value={awsRegion}
+                              onChange={(e) => setAwsRegion(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent bg-white"
+                            >
+                              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                              <option value="us-east-2">us-east-2 (Ohio)</option>
+                              <option value="us-west-2">us-west-2 (Oregon)</option>
+                              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+                              <option value="eu-west-2">eu-west-2 (London)</option>
+                              <option value="eu-west-3">eu-west-3 (Paris)</option>
+                              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+                              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+                              <option value="ap-southeast-2">ap-southeast-2 (Sydney)</option>
+                              <option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status and Actions */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          {credSaveSuccess ? (
+                            <span className="flex items-center gap-1 text-sm text-green-600">
+                              <Check className="w-4 h-4" />
+                              Saved
+                            </span>
+                          ) : credConfig && (
+                            <span className={cn(
+                              'text-xs px-2 py-1 rounded-full',
+                              (credConfig.provider === 'bedrock' && credConfig.aws_configured) ||
+                              (credConfig.provider === 'anthropic' && credConfig.anthropic_configured)
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            )}>
+                              {(credConfig.provider === 'bedrock' && credConfig.aws_configured) ||
+                               (credConfig.provider === 'anthropic' && credConfig.anthropic_configured)
+                                ? 'Configured'
+                                : 'Not configured'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleClearCredentials}
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveCredentials}
+                            disabled={credSaving}
+                            loading={credSaving}
+                          >
+                            {credSaving ? 'Saving...' : 'Save Configuration'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <hr className="border-gray-200" />
+
+                    {/* Reset Application Section */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-2">Reset Application</h4>
                       <p className="text-sm text-gray-600 mb-4">

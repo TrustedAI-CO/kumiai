@@ -9,6 +9,7 @@ from app.api.exceptions import EXCEPTION_HANDLERS
 from app.api.middleware import setup_middleware
 from app.api.routes import (
     agents,
+    credentials,
     health,
     mcp,
     messages,
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
         onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"]
     )
     app.include_router(system.router, prefix="/api/v1/system", tags=["System"])
+    app.include_router(credentials.router, prefix="/api/v1", tags=["Credentials"])
 
     # Store debug mode in app state for error handlers
     app.state.debug = settings.environment == "development"

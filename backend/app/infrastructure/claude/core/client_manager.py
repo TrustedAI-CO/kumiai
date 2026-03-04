@@ -6,7 +6,7 @@ loading from the filesystem and SessionFactory integration.
 """
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 
@@ -42,6 +42,7 @@ class ClaudeClientManager:
         agent_repo: AgentRepository,
         skill_repo: SkillRepository,
         config: ClaudeSettings,
+        credential_service: Optional[Any] = None,
     ) -> None:
         """
         Initialize Claude client manager.
@@ -50,13 +51,16 @@ class ClaudeClientManager:
             agent_repo: Repository for loading agent configurations
             skill_repo: Repository for loading skill configurations
             config: Claude SDK configuration settings
+            credential_service: Service for fetching provider credentials
         """
         self._agent_repo = agent_repo
         self._skill_repo = skill_repo
         self._config = config
 
-        # Initialize session factory
-        self._session_factory = SessionFactory(agent_repo, skill_repo)
+        # Initialize session factory with credential service
+        self._session_factory = SessionFactory(
+            agent_repo, skill_repo, credential_service=credential_service
+        )
 
         # Session tracking
         self._clients: Dict[UUID, ClaudeClient] = {}

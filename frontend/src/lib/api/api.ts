@@ -707,6 +707,32 @@ export const api = {
     });
     if (!res.ok) throw new Error(await res.text());
   },
+
+  // Credentials Management
+  async getCredentialsConfig(): Promise<CredentialsConfigResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/settings/credentials`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async saveCredentialsConfig(req: CredentialsConfigRequest): Promise<CredentialsConfigResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/settings/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async clearCredentials(): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/v1/settings/credentials`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(await res.text());
+  },
 };
 
 export interface SkillMetadata {
@@ -860,4 +886,28 @@ export interface SetupDemoResponse {
 export interface OnboardingStatusResponse {
   completed: boolean;
   team: string | null;
+}
+
+// Credentials Management
+export interface AWSCredentials {
+  aws_access_key_id: string;
+  aws_secret_access_key: string;
+  aws_session_token?: string;
+  aws_region: string;
+}
+
+export interface CredentialsConfigRequest {
+  provider: 'anthropic' | 'bedrock';
+  anthropic_api_key?: string;
+  aws_credentials?: AWSCredentials;
+}
+
+export interface CredentialsConfigResponse {
+  provider: string;
+  anthropic_configured: boolean;
+  anthropic_api_key_masked?: string;
+  aws_configured: boolean;
+  aws_access_key_id_masked?: string;
+  aws_region?: string;
+  has_session_token: boolean;
 }
