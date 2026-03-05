@@ -401,8 +401,9 @@ class CodeAgentWrapperClient:
         import os
 
         env = os.environ.copy()
-        # codeagent-wrapper picks up config from its own config file
-        # and environment variables
+        # Enable real-time stdout passthrough so the wrapper tees
+        # the child CLI's stdout to its own stdout as events arrive.
+        env["CODEAGENT_PASSTHROUGH"] = "1"
         return env
 
     def _convert_event_to_message(self, event: ParsedEvent) -> dict:

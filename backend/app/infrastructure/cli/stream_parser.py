@@ -91,6 +91,84 @@ def parse_claude_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
     return None
 
 
+def parse_gemini_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
+    """Parse Gemini CLI stream-json format.
+
+    Gemini CLI events (with -o stream-json):
+    - {"type":"init","session_id":"..."}
+    - {"type":"text","role":"model","content":"...","delta":true}
+    - {"type":"result","status":"success|error"}
+    """
+    event_type = data.get("type", "")
+
+    if event_type == "init":
+        return ParsedEvent(
+            event_type="init",
+            session_id=data.get("session_id"),
+            raw=data,
+        )
+
+    if event_type == "text" and data.get("role") == "model":
+        content = data.get("content", "")
+        if content:
+            return ParsedEvent(event_type="text", content=content, raw=data)
+        return None
+
+    if event_type == "result":
+        status = data.get("status", "")
+        if status in ("error", "failed"):
+            return ParsedEvent(
+                event_type="error",
+                content=data.get("error", "Gemini execution failed"),
+                raw=data,
+            )
+        return ParsedEvent(
+            event_type="complete",
+            content=data.get("content", ""),
+            raw=data,
+        )
+
+    return None
+
+
+def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
+    """Parse Codex CLI JSON output format.
+
+    Codex events:
+    - {"type":"thread.started","thread_id":"..."}
+    - {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+    - {"type":"thread.completed","thread_id":"..."}
+    - {"type":"turn.completed"}
+    """
+    event_type = data.get("type", "")
+
+    if event_type == "thread.started":
+        return ParsedEvent(
+            event_type="init",
+            session_id=data.get("thread_id"),
+            raw=data,
+        )
+
+    if event_type == "item.completed":
+        item = data.get("item")
+        if isinstance(item, dict) and item.get("type") == "agent_message":
+            text = item.get("text", "")
+            if isinstance(text, list):
+                text = " ".join(str(t) for t in text)
+            if text:
+                return ParsedEvent(event_type="text", content=text, raw=data)
+        return None
+
+    if event_type in ("thread.completed", "turn.completed"):
+        return ParsedEvent(
+            event_type="complete",
+            content="",
+            raw=data,
+        )
+
+    return None
+
+
 def parse_stream_line(line: str, backend: str = "claude") -> Optional[ParsedEvent]:
     """Parse a single line of streaming JSON output.
 
@@ -110,6 +188,24 @@ def parse_stream_line(line: str, backend: str = "claude") -> Optional[ParsedEven
     except json.JSONDecodeError:
         return None
 
-    # codeagent-wrapper passes through the backend's stream format
-    # All backends use similar JSON streaming when invoked via codeagent-wrapper
-    return parse_claude_stream_event(data)
+    if not isinstance(data, dict):
+        return None
+
+    # Route to backend-specific parser
+    if backend == "gemini":
+        return parse_gemini_stream_event(data)
+    if backend == "codex":
+        return parse_codex_stream_event(data)
+
+    # Claude and fallback: try all parsers
+    result = parse_claude_stream_event(data)
+    if result:
+        return result
+
+    # Auto-detect: try Gemini then Codex patterns
+    if data.get("role") or data.get("delta") is not None or data.get("status"):
+        return parse_gemini_stream_event(data)
+    if data.get("thread_id") or (isinstance(data.get("item"), dict)):
+        return parse_codex_stream_event(data)
+
+    return None
