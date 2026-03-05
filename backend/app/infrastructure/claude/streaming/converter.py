@@ -379,12 +379,35 @@ def _extract_codeagent_dict_events(
     - {"type": "error", "error": {"message": ...}}           → error
     - {"type": "result", ...}                                → completion
     """
-    from app.infrastructure.claude.streaming.events import ContentBlockEvent
+    from app.infrastructure.claude.streaming.events import ContentBlockEvent, ContentBlockStopEvent
 
     events: List[SSEEvent] = []
     msg_type = message.get("type", "")
 
-    if msg_type == "init":
+    if msg_type == "stream_delta":
+        # Incremental text chunk for real-time streaming
+        delta = message.get("delta", {})
+        if isinstance(delta, dict) and delta.get("type") == "text_delta":
+            text = delta.get("text", "")
+            if text:
+                events.append(
+                    StreamDeltaEvent(
+                        session_id=session_id,
+                        content=text,
+                        content_index=int(message.get("content_index", 0)),
+                    )
+                )
+
+    elif msg_type == "content_block_stop":
+        # Flush trigger for buffered stream deltas
+        events.append(
+            ContentBlockStopEvent(
+                session_id=session_id,
+                content_index=int(message.get("content_index", 0)),
+            )
+        )
+
+    elif msg_type == "init":
         # Session initialization - just log
         logger.debug(
             "codeagent_init_received",

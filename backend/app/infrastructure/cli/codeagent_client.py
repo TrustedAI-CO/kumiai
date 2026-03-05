@@ -5,6 +5,7 @@ backends with a unified interface compatible with KumiAI's session system.
 """
 
 import asyncio
+import codecs
 import re
 import uuid
 from collections.abc import AsyncIterable
@@ -136,10 +137,16 @@ class CodeAgentWrapperClient:
         self._pending_query = message
         self._process_ready.set()  # Signal that subprocess is ready for reading
 
+    # Chunk reading constants
+    _READ_CHUNK_SIZE = 1024
+    _FLUSH_INTERVAL_SEC = 0.08  # 80ms - flush timeout for partial lines
+
     async def receive_messages(self) -> AsyncIterator[dict]:
         """Stream response messages from codeagent-wrapper output.
 
-        Yields message dicts compatible with KumiAI's event processing.
+        Uses chunk-based reading for real-time streaming. Yields both
+        stream_delta (incremental) and content_block_stop (flush trigger)
+        messages so the executor can buffer deltas and flush periodically.
         """
         # Clear process_ready at the start so we always wait for the NEW subprocess.
         # query() runs concurrently via create_task and will set() this after spawning.
@@ -163,75 +170,110 @@ class CodeAgentWrapperClient:
             "data": {"session_id": self._session_id},
         }
 
-        # codeagent-wrapper output format (non-JSON / plain text mode):
-        #   Line 1: echo of the query text (skip)
-        #   Middle lines: actual response content (keep)
-        #   "---": separator (skip)
-        #   "SESSION_ID: xxx": metadata (skip, extract session info)
         first_line = True
         self._in_error_block = False
         self._error_lines = []
 
-        async for raw_line in self._process.stdout:
-            line = raw_line.decode("utf-8", errors="replace")
-            event = parse_stream_line(line, self._backend)
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        line_buffer = ""
 
-            if event is None:
-                # Non-JSON output - filter codeagent-wrapper metadata
-                stripped = line.strip()
-                if not stripped:
-                    continue
+        while True:
+            # Read chunks with timeout for periodic flushing
+            try:
+                raw = await asyncio.wait_for(
+                    self._process.stdout.read(self._READ_CHUNK_SIZE),
+                    timeout=self._FLUSH_INTERVAL_SEC,
+                )
+            except asyncio.TimeoutError:
+                raw = b""
 
-                # Skip first line if it's the echoed query
-                if first_line:
-                    first_line = False
-                    if self._query_text and stripped.startswith(self._query_text):
-                        # First line contains echo + possibly start of response
-                        remainder = stripped[len(self._query_text):]
-                        if remainder:
-                            yield self._make_text_message(remainder)
+            if raw:
+                chunk_text = decoder.decode(raw, final=False)
+                line_buffer += chunk_text
+
+                # Process complete lines from the buffer
+                while "\n" in line_buffer:
+                    line, line_buffer = line_buffer.split("\n", 1)
+
+                    # Try JSON parsing first
+                    event = parse_stream_line(line, self._backend)
+
+                    if event is not None:
+                        first_line = False
+                        if self._in_error_block:
+                            error_msg = self._flush_error_block()
+                            yield self._make_error_message(error_msg)
+
+                        if event.event_type == "text" and event.content:
+                            yield self._make_stream_delta_message(event.content)
+                            yield self._make_content_block_stop_message()
+                        else:
+                            yield self._convert_event_to_message(event)
                         continue
 
-                # Skip codeagent-wrapper banner and metadata lines
-                if self._is_wrapper_noise(stripped):
-                    logger.debug(
-                        "codeagent_metadata_skipped",
-                        line=stripped[:80],
-                    )
-                    continue
+                    # Plain text line processing
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
 
-                # Detect start of error blocks (API errors, stack traces)
-                if self._is_error_block_start(stripped):
-                    self._in_error_block = True
-                    self._error_lines = [stripped]
-                    logger.debug(
-                        "codeagent_error_block_start",
-                        line=stripped[:80],
-                    )
-                    continue
+                    # Skip first line if it's the echoed query
+                    if first_line:
+                        first_line = False
+                        if self._query_text and stripped.startswith(self._query_text):
+                            remainder = stripped[len(self._query_text):]
+                            if remainder:
+                                yield self._make_stream_delta_message(remainder)
+                                yield self._make_content_block_stop_message()
+                            continue
 
-                # Continue accumulating error block lines
+                    if self._is_wrapper_noise(stripped):
+                        logger.debug("codeagent_metadata_skipped", line=stripped[:80])
+                        continue
+
+                    if self._is_error_block_start(stripped):
+                        self._in_error_block = True
+                        self._error_lines = [stripped]
+                        logger.debug("codeagent_error_block_start", line=stripped[:80])
+                        continue
+
+                    if self._in_error_block:
+                        if self._is_error_block_content(stripped):
+                            self._error_lines.append(stripped)
+                            continue
+                        else:
+                            error_msg = self._flush_error_block()
+                            yield self._make_error_message(error_msg)
+
+                    # Emit delta + flush for real-time streaming
+                    yield self._make_stream_delta_message(stripped)
+                    yield self._make_content_block_stop_message()
+
+            # EOF detection
+            if raw == b"" and self._process.returncode is not None:
+                break
+
+        # Process remaining decoder buffer
+        tail = decoder.decode(b"", final=True)
+        if tail:
+            line_buffer += tail
+
+        # Process remaining line buffer
+        if line_buffer.strip():
+            stripped = line_buffer.strip()
+            if not self._is_wrapper_noise(stripped) and not self._is_error_block_start(stripped):
                 if self._in_error_block:
                     if self._is_error_block_content(stripped):
                         self._error_lines.append(stripped)
-                        continue
                     else:
-                        # Error block ended - yield as error event
                         error_msg = self._flush_error_block()
                         yield self._make_error_message(error_msg)
-                        # Fall through to process current line as normal
+                        yield self._make_stream_delta_message(stripped)
+                        yield self._make_content_block_stop_message()
+                else:
+                    yield self._make_stream_delta_message(stripped)
+                    yield self._make_content_block_stop_message()
 
-                yield self._make_text_message(stripped)
-                continue
-
-            first_line = False
-            # If we were in an error block and got JSON, flush it
-            if self._in_error_block:
-                error_msg = self._flush_error_block()
-                yield self._make_error_message(error_msg)
-            yield self._convert_event_to_message(event)
-
-        # Flush any remaining error block at end of stream
+        # Flush any remaining error block
         if self._in_error_block and self._error_lines:
             error_msg = self._flush_error_block()
             yield self._make_error_message(error_msg)
@@ -501,6 +543,23 @@ class CodeAgentWrapperClient:
         if len(first_line) > 150:
             first_line = first_line[:150] + "..."
         return f"Backend error: {first_line}"
+
+    def _make_stream_delta_message(self, text: str, content_index: int = 0) -> dict:
+        """Create an incremental stream delta message for real-time streaming."""
+        return {
+            "type": "stream_delta",
+            "delta": {"type": "text_delta", "text": text},
+            "content_index": content_index,
+            "session_id": self._session_id,
+        }
+
+    def _make_content_block_stop_message(self, content_index: int = 0) -> dict:
+        """Create a content block stop marker to trigger buffer flush."""
+        return {
+            "type": "content_block_stop",
+            "content_index": content_index,
+            "session_id": self._session_id,
+        }
 
     def _make_error_message(self, error_text: str) -> dict:
         """Create an error message dict."""
