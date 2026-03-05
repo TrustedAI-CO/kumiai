@@ -253,7 +253,19 @@ class SessionExecutor:
             )
 
             # Run and broadcast events
+            from app.infrastructure.sse.manager import sse_manager
+
             async for event in execution.run():
+                # Log all events for debugging non-Claude backends
+                sse_count = sse_manager.get_connection_count(session_id)
+                logger.info(
+                    "execution_event",
+                    session_id=str(session_id),
+                    event_type=event.type,
+                    sse_connections=sse_count,
+                    content_preview=getattr(event, 'content', '')[:80] if hasattr(event, 'content') else None,
+                )
+
                 # Save messages to database at transitions (reuse same db session)
                 if event.type == "content_block" and event.block_type == "text":
                     await self._save_assistant_message(
@@ -274,14 +286,14 @@ class SessionExecutor:
                         context["db_lock"],
                     )
 
+                # Commit before broadcasting message_complete so that
+                # frontend loadFromDB can see the saved messages
+                if event.type == "message_complete":
+                    async with context["db_lock"]:
+                        await context["db_session"].commit()
+
                 # Broadcast to SSE
-                from app.infrastructure.sse.manager import sse_manager
-
                 await sse_manager.broadcast(session_id, event.to_sse())
-
-            # Commit all saves (with lock)
-            async with context["db_lock"]:
-                await context["db_session"].commit()
 
             # Update status to IDLE
             await self._update_session_status_after_execution(session_id, None)

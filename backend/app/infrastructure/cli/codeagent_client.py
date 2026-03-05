@@ -229,13 +229,13 @@ class CodeAgentWrapperClient:
         logger.info("codeagent_disconnected", backend=self._backend)
 
     def is_alive(self) -> bool:
-        """Check if the client is still operational."""
-        if not self._connected:
-            return False
-        # If there's an active process, check it
-        if self._process and self._process.returncode is not None:
-            return False
-        return True
+        """Check if the client is still operational.
+
+        For CodeAgent, each query spawns a new subprocess, so a completed
+        process does NOT mean the client is dead. The client remains alive
+        as long as it's connected.
+        """
+        return self._connected
 
     def get_session_id(self) -> Optional[str]:
         """Get the session ID (synchronous)."""
