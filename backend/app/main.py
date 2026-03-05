@@ -31,45 +31,6 @@ from app.infrastructure.database.models import Base
 logger = get_logger(__name__)
 
 
-async def _seed_default_data() -> None:
-    """Copy example agents and skills when their directories are empty.
-
-    Runs once on first startup so new installations have useful defaults.
-    """
-    import shutil
-    from pathlib import Path
-
-    examples_base = Path(__file__).resolve().parent.parent / "examples"
-
-    for kind, target_dir in [
-        ("agents", settings.agents_dir),
-        ("skills", settings.skills_dir),
-    ]:
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        existing = [d for d in target_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
-        if existing:
-            logger.debug(f"{kind}_seed_skipped", existing_count=len(existing))
-            continue
-
-        source = examples_base / kind
-        if not source.is_dir():
-            logger.debug(f"{kind}_seed_no_examples", path=str(source))
-            continue
-
-        copied = 0
-        for item_dir in source.iterdir():
-            if not item_dir.is_dir():
-                continue
-            dest = target_dir / item_dir.name
-            if not dest.exists():
-                shutil.copytree(item_dir, dest)
-                copied += 1
-
-        if copied:
-            logger.info(f"{kind}_seeded", count=copied, source=str(source))
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan manager."""
@@ -94,12 +55,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as e:
         logger.error("database_initialization_failed", error=str(e))
         raise
-
-    # Seed default agents from examples if agents directory is empty
-    try:
-        await _seed_default_data()
-    except Exception as e:
-        logger.warning("agent_seed_failed", error=str(e))
 
     # TODO: Load MCP servers (if enabled)
     if settings.enable_mcp:
