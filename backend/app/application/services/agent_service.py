@@ -72,6 +72,7 @@ class AgentService:
             name=request.name,
             description=request.description,
             file_path=file_path,
+            cli_backend=request.cli_backend or "claude",
             default_model=request.default_model or "sonnet",
             tags=request.tags or [],
             skills=request.skills or [],
@@ -160,6 +161,7 @@ class AgentService:
         agent.update_metadata(
             name=request.name,
             description=request.description,
+            cli_backend=request.cli_backend,
             default_model=request.default_model,
             tags=request.tags,
             skills=request.skills,

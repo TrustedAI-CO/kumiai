@@ -249,6 +249,9 @@ Add any additional notes, warnings, or tips here.
             # Add optional fields if provided
             if agent.description:
                 metadata["description"] = agent.description
+            # Add cli_backend only if not "claude" (default)
+            if agent.cli_backend != "claude":
+                metadata["cli_backend"] = agent.cli_backend
             # Add default_model only if not "sonnet" (default)
             if agent.default_model != "sonnet":
                 metadata["default_model"] = agent.default_model
@@ -295,6 +298,7 @@ Add any additional notes, warnings, or tips here.
                 name=metadata.get("name", agent_id),
                 description=metadata.get("description"),
                 file_path=f"/agents/{agent_id}/",
+                cli_backend=metadata.get("cli_backend", "claude"),
                 default_model=metadata.get("default_model", "sonnet"),
                 tags=metadata.get("tags", []),
                 skills=metadata.get("skills", []),
@@ -403,6 +407,8 @@ Add any additional notes, warnings, or tips here.
                     name=metadata.get("name", agent_id),
                     description=metadata.get("description"),
                     file_path=f"/agents/{agent_id}/",
+                    cli_backend=metadata.get("cli_backend", "claude"),
+                    default_model=metadata.get("default_model", "sonnet"),
                     tags=metadata.get("tags", []),
                     skills=metadata.get("skills", []),
                     allowed_tools=metadata.get("allowed_tools", []),
@@ -441,6 +447,9 @@ Add any additional notes, warnings, or tips here.
             # Add optional fields if provided
             if agent.description:
                 metadata["description"] = agent.description
+            # Add cli_backend only if not "claude" (default)
+            if agent.cli_backend != "claude":
+                metadata["cli_backend"] = agent.cli_backend
             # Add default_model only if not "sonnet" (default)
             if agent.default_model != "sonnet":
                 metadata["default_model"] = agent.default_model

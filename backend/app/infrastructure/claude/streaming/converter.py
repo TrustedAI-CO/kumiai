@@ -97,6 +97,14 @@ def convert_message_to_events(
             },
         )
 
+    # Handle dict messages from CodeAgentWrapperClient
+    elif isinstance(message, dict):
+        events.extend(
+            _extract_codeagent_dict_events(
+                message, session_id, response_id, agent_id, agent_name
+            )
+        )
+
     # Unknown message type
     else:
         # Get full type info for debugging
@@ -349,5 +357,109 @@ def _extract_assistant_message_events(
                 "unknown_content_block",
                 extra={"session_id": session_id, "block_type": type(block).__name__},
             )
+
+    return events
+
+
+def _extract_codeagent_dict_events(
+    message: dict,
+    session_id: str,
+    response_id: str | None = None,
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+) -> List[SSEEvent]:
+    """
+    Convert dict messages from CodeAgentWrapperClient to SSE events.
+
+    CodeAgentWrapperClient.receive_messages() yields dicts with these types:
+    - {"type": "init", ...}           → ignored (session setup)
+    - {"type": "assistant", "message": {"content": [...]}} → text events
+    - {"type": "tool_use", "name": ..., "input": ...}       → tool use
+    - {"type": "tool_result", "content": ...}                → tool result
+    - {"type": "error", "error": {"message": ...}}           → error
+    - {"type": "result", ...}                                → completion
+    """
+    from app.infrastructure.claude.streaming.events import ContentBlockEvent
+
+    events: List[SSEEvent] = []
+    msg_type = message.get("type", "")
+
+    if msg_type == "init":
+        # Session initialization - just log
+        logger.debug(
+            "codeagent_init_received",
+            extra={"session_id": session_id},
+        )
+
+    elif msg_type == "assistant":
+        # Text content from codeagent-wrapper
+        msg_data = message.get("message", {})
+        content_blocks = msg_data.get("content", [])
+        for block in content_blocks:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    events.append(
+                        ContentBlockEvent(
+                            session_id=session_id,
+                            content=text,
+                            block_type="text",
+                            response_id=response_id,
+                            agent_id=agent_id,
+                            agent_name=agent_name,
+                        )
+                    )
+
+    elif msg_type == "tool_use":
+        events.append(
+            ToolUseEvent(
+                session_id=session_id,
+                tool_use_id=message.get("id", ""),
+                tool_name=message.get("name", "unknown"),
+                tool_input=message.get("input", {}),
+                response_id=response_id,
+                agent_id=agent_id,
+                agent_name=agent_name,
+            )
+        )
+
+    elif msg_type == "tool_result":
+        events.append(
+            ToolCompleteEvent(
+                session_id=session_id,
+                tool_use_id=message.get("tool_use_id", ""),
+                result=message.get("content", ""),
+                is_error=False,
+            )
+        )
+
+    elif msg_type == "error":
+        error_data = message.get("error", {})
+        error_msg = error_data.get("message", "Unknown error") if isinstance(error_data, dict) else str(error_data)
+        events.append(
+            ErrorEvent(
+                session_id=session_id,
+                error=error_msg,
+                error_type="codeagent_error",
+            )
+        )
+
+    elif msg_type == "result":
+        # Execution complete
+        events.append(MessageCompleteEvent(session_id=session_id))
+        logger.info(
+            "codeagent_execution_complete",
+            extra={"session_id": session_id},
+        )
+
+    else:
+        logger.warning(
+            "unknown_codeagent_message_type",
+            extra={
+                "session_id": session_id,
+                "type": msg_type,
+                "message": str(message)[:200],
+            },
+        )
 
     return events

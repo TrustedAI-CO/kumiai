@@ -28,7 +28,8 @@ class Agent:
     name: str
     file_path: str  # Path to agent directory
     description: Optional[str] = None
-    default_model: str = "sonnet"  # LLM model to use (sonnet, opus, haiku)
+    cli_backend: str = "claude"  # CLI backend (claude, codex, gemini, opencode)
+    default_model: str = "sonnet"  # LLM model to use (backend-specific)
     tags: List[str] = field(default_factory=list)
     skills: List[str] = field(default_factory=list)  # Skill IDs
     allowed_tools: List[str] = field(default_factory=list)  # Built-in tool names
@@ -39,6 +40,7 @@ class Agent:
         self,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        cli_backend: Optional[str] = None,
         default_model: Optional[str] = None,
         tags: Optional[List[str]] = None,
         skills: Optional[List[str]] = None,
@@ -52,6 +54,7 @@ class Agent:
         Args:
             name: New agent name (optional)
             description: New agent description (optional)
+            cli_backend: New CLI backend (optional)
             default_model: New default model (optional)
             tags: New tag list (optional)
             skills: New skill ID list (optional)
@@ -63,6 +66,8 @@ class Agent:
             self.name = name
         if description is not None:
             self.description = description
+        if cli_backend is not None:
+            self.cli_backend = cli_backend
         if default_model is not None:
             self.default_model = default_model
         if tags is not None:
@@ -158,6 +163,13 @@ class Agent:
 
         if not self.file_path or not self.file_path.strip():
             raise ValidationError("Agent file_path cannot be empty")
+
+        valid_backends = ("claude", "codex", "gemini", "opencode")
+        if self.cli_backend not in valid_backends:
+            raise ValidationError(
+                f"Invalid cli_backend '{self.cli_backend}'. "
+                f"Must be one of: {valid_backends}"
+            )
 
         # Validate icon color format (hex color)
         if self.icon_color:

@@ -36,6 +36,7 @@ class Session:
     project_id: Optional[UUID]
     session_type: SessionType
     status: SessionStatus
+    cli_backend: str = "claude"  # CLI backend (claude, codex, gemini, opencode)
     claude_session_id: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None

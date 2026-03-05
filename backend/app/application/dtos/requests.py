@@ -165,8 +165,11 @@ class CreateAgentRequest(BaseModel):
     file_path: Optional[str] = Field(
         None, description="Path to agent directory (auto-generated if not provided)"
     )
+    cli_backend: Optional[str] = Field(
+        "claude", description="CLI backend (claude, codex, gemini, opencode)"
+    )
     default_model: Optional[str] = Field(
-        "sonnet", description="Default LLM model (sonnet, opus, haiku)"
+        "sonnet", description="Default LLM model (backend-specific)"
     )
     tags: Optional[List[str]] = Field(default_factory=list, description="Agent tags")
     skills: Optional[List[str]] = Field(default_factory=list, description="Skill IDs")
@@ -184,6 +187,7 @@ class UpdateAgentRequest(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
+    cli_backend: Optional[str] = None
     default_model: Optional[str] = None
     tags: Optional[List[str]] = None
     skills: Optional[List[str]] = None
