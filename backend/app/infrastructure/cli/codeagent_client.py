@@ -121,7 +121,7 @@ class CodeAgentWrapperClient:
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,  # Merge stderr into stdout
             cwd=str(self._cwd),
             env=env,
         )
@@ -178,8 +178,8 @@ class CodeAgentWrapperClient:
                             yield self._make_text_message(remainder)
                         continue
 
-                # Skip metadata lines
-                if stripped == "---" or stripped.startswith("SESSION_ID:"):
+                # Skip codeagent-wrapper banner and metadata lines
+                if self._is_wrapper_noise(stripped):
                     logger.debug(
                         "codeagent_metadata_skipped",
                         line=stripped[:80],
@@ -195,17 +195,13 @@ class CodeAgentWrapperClient:
         # Wait for process to finish
         await self._process.wait()
 
-        # Read any stderr
-        if self._process.stderr:
-            stderr_data = await self._process.stderr.read()
-            stderr_text = stderr_data.decode("utf-8", errors="replace").strip()
-            if stderr_text and self._process.returncode != 0:
-                logger.warning(
-                    "codeagent_stderr",
-                    backend=self._backend,
-                    stderr=stderr_text[:500],
-                    returncode=self._process.returncode,
-                )
+        # stderr is merged into stdout via STDOUT redirect
+        if self._process.returncode != 0:
+            logger.warning(
+                "codeagent_nonzero_exit",
+                backend=self._backend,
+                returncode=self._process.returncode,
+            )
 
         # Yield completion event
         yield {
@@ -345,6 +341,27 @@ class CodeAgentWrapperClient:
 
         # Default: wrap as text
         return self._make_text_message(str(event.raw))
+
+    # Lines from codeagent-wrapper stderr/banner that should be filtered
+    _WRAPPER_NOISE_PREFIXES = (
+        "[codeagent-wrapper]",
+        "Backend:",
+        "Command:",
+        "PID:",
+        "Log:",
+        "SESSION_ID:",
+        "Attempt ",  # Retry messages like "Attempt 1 failed with status 429"
+        "    at ",   # Stack trace lines
+    )
+    _WRAPPER_NOISE_EXACT = {"---"}
+
+    def _is_wrapper_noise(self, line: str) -> bool:
+        """Check if line is codeagent-wrapper metadata/noise."""
+        if line in self._WRAPPER_NOISE_EXACT:
+            return True
+        if line.startswith(self._WRAPPER_NOISE_PREFIXES):
+            return True
+        return False
 
     def _make_text_message(self, text: str) -> dict:
         """Create a text message dict."""
