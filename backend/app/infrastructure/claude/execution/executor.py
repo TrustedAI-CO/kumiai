@@ -256,16 +256,6 @@ class SessionExecutor:
             from app.infrastructure.sse.manager import sse_manager
 
             async for event in execution.run():
-                # Log all events for debugging non-Claude backends
-                sse_count = sse_manager.get_connection_count(session_id)
-                logger.info(
-                    "execution_event",
-                    session_id=str(session_id),
-                    event_type=event.type,
-                    sse_connections=sse_count,
-                    content_preview=getattr(event, 'content', '')[:80] if hasattr(event, 'content') else None,
-                )
-
                 # Save messages to database at transitions (reuse same db session)
                 if event.type == "content_block" and event.block_type == "text":
                     await self._save_assistant_message(

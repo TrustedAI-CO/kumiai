@@ -102,6 +102,10 @@ class CodeAgentWrapperClient:
         else:
             query_text = await self._extract_text_from_stream(message)
 
+        # Clear (not replace) process_ready so receive_messages() which may already
+        # hold a reference to this event will correctly wait for the new set()
+        self._process_ready.clear()
+
         # Kill existing process if still running
         if self._process and self._process.returncode is None:
             self._process.kill()
