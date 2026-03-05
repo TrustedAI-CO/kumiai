@@ -179,6 +179,7 @@ class CodeAgentWrapperClient:
 
         while True:
             # Read chunks with timeout for periodic flushing
+            timed_out = False
             try:
                 raw = await asyncio.wait_for(
                     self._process.stdout.read(self._READ_CHUNK_SIZE),
@@ -186,6 +187,7 @@ class CodeAgentWrapperClient:
                 )
             except asyncio.TimeoutError:
                 raw = b""
+                timed_out = True
 
             if raw:
                 chunk_text = decoder.decode(raw, final=False)
@@ -211,7 +213,7 @@ class CodeAgentWrapperClient:
                             yield self._convert_event_to_message(event)
                         continue
 
-                    # Plain text line processing
+                    # Use stripped for control checks, preserve original for emission
                     stripped = line.strip()
                     if not stripped:
                         continue
@@ -222,7 +224,7 @@ class CodeAgentWrapperClient:
                         if self._query_text and stripped.startswith(self._query_text):
                             remainder = stripped[len(self._query_text):]
                             if remainder:
-                                yield self._make_stream_delta_message(remainder)
+                                yield self._make_stream_delta_message(remainder + "\n")
                                 yield self._make_content_block_stop_message()
                             continue
 
@@ -244,12 +246,21 @@ class CodeAgentWrapperClient:
                             error_msg = self._flush_error_block()
                             yield self._make_error_message(error_msg)
 
-                    # Emit delta + flush for real-time streaming
-                    yield self._make_stream_delta_message(stripped)
+                    # Emit delta + flush preserving line structure
+                    yield self._make_stream_delta_message(line.rstrip("\r") + "\n")
                     yield self._make_content_block_stop_message()
 
-            # EOF detection
-            if raw == b"" and self._process.returncode is not None:
+            # Timeout flush: emit partial line content for real-time delivery
+            if timed_out and line_buffer and not self._in_error_block:
+                partial = line_buffer
+                partial_stripped = partial.strip()
+                if partial_stripped and not self._is_wrapper_noise(partial_stripped):
+                    yield self._make_stream_delta_message(partial)
+                    yield self._make_content_block_stop_message()
+                    line_buffer = ""
+
+            # EOF detection (only on actual empty read, not timeout)
+            if raw == b"" and not timed_out and self._process.returncode is not None:
                 break
 
         # Process remaining decoder buffer
@@ -260,17 +271,20 @@ class CodeAgentWrapperClient:
         # Process remaining line buffer
         if line_buffer.strip():
             stripped = line_buffer.strip()
-            if not self._is_wrapper_noise(stripped) and not self._is_error_block_start(stripped):
+            if self._is_error_block_start(stripped):
+                self._in_error_block = True
+                self._error_lines = [stripped]
+            elif not self._is_wrapper_noise(stripped):
                 if self._in_error_block:
                     if self._is_error_block_content(stripped):
                         self._error_lines.append(stripped)
                     else:
                         error_msg = self._flush_error_block()
                         yield self._make_error_message(error_msg)
-                        yield self._make_stream_delta_message(stripped)
+                        yield self._make_stream_delta_message(line_buffer)
                         yield self._make_content_block_stop_message()
                 else:
-                    yield self._make_stream_delta_message(stripped)
+                    yield self._make_stream_delta_message(line_buffer)
                     yield self._make_content_block_stop_message()
 
         # Flush any remaining error block

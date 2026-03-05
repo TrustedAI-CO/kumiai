@@ -381,6 +381,12 @@ def _extract_codeagent_dict_events(
     """
     from app.infrastructure.claude.streaming.events import ContentBlockEvent, ContentBlockStopEvent
 
+    def _safe_content_index(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     events: List[SSEEvent] = []
     msg_type = message.get("type", "")
 
@@ -394,7 +400,7 @@ def _extract_codeagent_dict_events(
                     StreamDeltaEvent(
                         session_id=session_id,
                         content=text,
-                        content_index=int(message.get("content_index", 0)),
+                        content_index=_safe_content_index(message.get("content_index", 0)),
                     )
                 )
 
@@ -403,7 +409,7 @@ def _extract_codeagent_dict_events(
         events.append(
             ContentBlockStopEvent(
                 session_id=session_id,
-                content_index=int(message.get("content_index", 0)),
+                content_index=_safe_content_index(message.get("content_index", 0)),
             )
         )
 
