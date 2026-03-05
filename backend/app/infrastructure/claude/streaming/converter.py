@@ -411,10 +411,22 @@ def _extract_codeagent_dict_events(
                     )
 
     elif msg_type == "tool_use":
+        tool_use_id = message.get("id", "")
+        if not tool_use_id:
+            import uuid
+            tool_use_id = uuid.uuid4().hex
+            logger.warning(
+                "codeagent_tool_use_missing_id",
+                extra={
+                    "session_id": session_id,
+                    "tool_name": message.get("name", "unknown"),
+                    "generated_id": tool_use_id,
+                },
+            )
         events.append(
             ToolUseEvent(
                 session_id=session_id,
-                tool_use_id=message.get("id", ""),
+                tool_use_id=tool_use_id,
                 tool_name=message.get("name", "unknown"),
                 tool_input=message.get("input", {}),
                 response_id=response_id,
@@ -429,7 +441,7 @@ def _extract_codeagent_dict_events(
                 session_id=session_id,
                 tool_use_id=message.get("tool_use_id", ""),
                 result=message.get("content", ""),
-                is_error=False,
+                is_error=bool(message.get("is_error", False)),
             )
         )
 

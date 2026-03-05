@@ -564,8 +564,8 @@ export function PreferencesModal({ isOpen, onClose, initialTab = 'profile' }: Pr
                         </button>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        {cliUsage?.backends.map(usage => {
-                          const backend = cliBackends?.backends.find(b => b.name === usage.name);
+                        {cliUsage?.backends?.map(usage => {
+                          const backend = cliBackends?.backends?.find(b => b.name === usage.name);
                           return (
                             <CLIUsageCard
                               key={usage.name}

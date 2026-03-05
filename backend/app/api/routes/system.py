@@ -253,7 +253,13 @@ def _get_claude_usage() -> CLIUsageInfo:
             if org_name:
                 extra["organization"] = org_name
             if email:
-                extra["account"] = email
+                # Mask email to avoid exposing PII in API responses
+                parts = email.split("@")
+                if len(parts) == 2 and len(parts[0]) > 1:
+                    masked = parts[0][0] + "***@" + parts[1]
+                else:
+                    masked = "***"
+                extra["account"] = masked
 
             first_token = data.get("claudeCodeFirstTokenDate", "")
             if first_token:

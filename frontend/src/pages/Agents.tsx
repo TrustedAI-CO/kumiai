@@ -547,11 +547,15 @@ export default function Agents({ onChatContextChange }: AgentsProps) {
                       }}
                       className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 focus-visible:border-input disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                     >
-                      {cliBackends.map(b => (
-                        <option key={b.name} value={b.name} disabled={!b.installed}>
-                          {b.name}{b.installed ? '' : ' (not installed)'}{b.version ? ` v${b.version}` : ''}
-                        </option>
-                      ))}
+                      {cliBackends.length === 0 ? (
+                        <option value="" disabled>No CLI backends available</option>
+                      ) : (
+                        cliBackends.map(b => (
+                          <option key={b.name} value={b.name} disabled={!b.installed}>
+                            {b.name}{b.installed ? '' : ' (not installed)'}{b.version ? ` v${b.version}` : ''}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 

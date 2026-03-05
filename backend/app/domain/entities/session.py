@@ -162,6 +162,12 @@ class Session:
         if self.session_type == SessionType.PM and not self.project_id:
             raise ValidationError("PM sessions must have a project_id")
 
+        valid_backends = {"claude", "codex", "gemini", "opencode"}
+        if self.cli_backend not in valid_backends:
+            raise ValidationError(
+                f"Invalid cli_backend '{self.cli_backend}'. Must be one of: {valid_backends}"
+            )
+
     def sync_kanban_stage(self) -> None:
         """
         Sync kanban_stage in context based on current session status.
