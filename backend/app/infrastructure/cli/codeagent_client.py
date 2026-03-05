@@ -69,6 +69,7 @@ class CodeAgentWrapperClient:
         self._query_text: Optional[str] = None  # Store query text to filter echo
         self._in_error_block = False  # Track multi-line error blocks
         self._error_lines: List[str] = []  # Accumulate error block lines
+        self._last_error_msg: Optional[str] = None  # Suppress repeated errors
 
         logger.info(
             "codeagent_client_initialized",
@@ -204,7 +205,8 @@ class CodeAgentWrapperClient:
                         first_line = False
                         if self._in_error_block:
                             error_msg = self._flush_error_block()
-                            yield self._make_error_message(error_msg)
+                            if error_msg:
+                                yield self._make_error_message(error_msg)
 
                         if event.event_type == "text" and event.content:
                             yield self._make_stream_delta_message(event.content)
@@ -244,7 +246,8 @@ class CodeAgentWrapperClient:
                             continue
                         else:
                             error_msg = self._flush_error_block()
-                            yield self._make_error_message(error_msg)
+                            if error_msg:
+                                yield self._make_error_message(error_msg)
 
                     # Emit delta + flush preserving line structure
                     yield self._make_stream_delta_message(line.rstrip("\r") + "\n")
@@ -280,7 +283,8 @@ class CodeAgentWrapperClient:
                         self._error_lines.append(stripped)
                     else:
                         error_msg = self._flush_error_block()
-                        yield self._make_error_message(error_msg)
+                        if error_msg:
+                            yield self._make_error_message(error_msg)
                         yield self._make_stream_delta_message(line_buffer)
                         yield self._make_content_block_stop_message()
                 else:
@@ -290,7 +294,8 @@ class CodeAgentWrapperClient:
         # Flush any remaining error block
         if self._in_error_block and self._error_lines:
             error_msg = self._flush_error_block()
-            yield self._make_error_message(error_msg)
+            if error_msg:
+                yield self._make_error_message(error_msg)
 
         # Wait for process to finish
         await self._process.wait()
@@ -472,6 +477,10 @@ class CodeAgentWrapperClient:
         r"|ETIMEDOUT"                          # Connection timeout
         r"|model.*not found"                   # Model not found errors
         r"|quota.*exceeded"                    # Quota exceeded
+        r'|^\s*"error"\s*:\s*\{'               # JSON error object: "error": {
+        r"|RESOURCE_EXHAUSTED"                 # Google API exhausted status
+        r"|MODEL_CAPACITY_EXHAUSTED"           # Gemini capacity exhausted
+        r"|No capacity available"              # Gemini capacity message
         r")",
         re.IGNORECASE,
     )
@@ -542,8 +551,12 @@ class CodeAgentWrapperClient:
             return True
         return False
 
-    def _flush_error_block(self) -> str:
-        """Flush accumulated error lines and return a user-friendly error message."""
+    def _flush_error_block(self) -> Optional[str]:
+        """Flush accumulated error lines and return a user-friendly error message.
+
+        Returns None if the same error was already emitted (suppress repeats
+        caused by backend-internal retries like gemini CLI's retryWithBackoff).
+        """
         error_lines = self._error_lines
         raw_error = "\n".join(error_lines)
         self._in_error_block = False
@@ -558,29 +571,32 @@ class CodeAgentWrapperClient:
         # Extract a user-friendly message from the raw error
         # Check for rate limit / capacity errors
         if re.search(
-            r"429|RESOURCE_EXHAUSTED|MODEL_CAPACITY_EXHAUSTED|rate.?limit|too many requests",
+            r"429|RESOURCE_EXHAUSTED|MODEL_CAPACITY_EXHAUSTED|rate.?limit|too many requests|No capacity available",
             raw_error,
             re.IGNORECASE,
         ):
-            return "API rate limit exceeded. The model is currently at capacity. Please wait a moment and try again."
+            msg = "API rate limit exceeded. The model is currently at capacity. Please wait a moment and try again."
+        elif re.search(r"500|INTERNAL", raw_error, re.IGNORECASE):
+            msg = "The AI backend returned an internal server error. Please try again."
+        elif re.search(r"503|SERVICE_UNAVAILABLE|UNAVAILABLE", raw_error, re.IGNORECASE):
+            msg = "The AI backend is temporarily unavailable. Please try again later."
+        elif re.search(r"timeout|ETIMEDOUT|ECONNREFUSED", raw_error, re.IGNORECASE):
+            msg = "Connection to the AI backend timed out. Please try again."
+        elif re.search(r"not found|NOT_FOUND", raw_error, re.IGNORECASE):
+            msg = "The specified model was not found. Please check the model configuration."
+        else:
+            # Generic fallback - extract the first meaningful line
+            first_line = error_lines[0] if error_lines else raw_error.split("\n")[0]
+            if len(first_line) > 150:
+                first_line = first_line[:150] + "..."
+            msg = f"Backend error: {first_line}"
 
-        if re.search(r"500|INTERNAL", raw_error, re.IGNORECASE):
-            return "The AI backend returned an internal server error. Please try again."
-
-        if re.search(r"503|SERVICE_UNAVAILABLE|UNAVAILABLE", raw_error, re.IGNORECASE):
-            return "The AI backend is temporarily unavailable. Please try again later."
-
-        if re.search(r"timeout|ETIMEDOUT|ECONNREFUSED", raw_error, re.IGNORECASE):
-            return "Connection to the AI backend timed out. Please try again."
-
-        if re.search(r"not found|NOT_FOUND", raw_error, re.IGNORECASE):
-            return "The specified model was not found. Please check the model configuration."
-
-        # Generic fallback - extract the first meaningful line
-        first_line = error_lines[0] if error_lines else raw_error.split("\n")[0]
-        if len(first_line) > 150:
-            first_line = first_line[:150] + "..."
-        return f"Backend error: {first_line}"
+        # Suppress duplicate error messages from backend retries
+        if msg == self._last_error_msg:
+            logger.debug("codeagent_duplicate_error_suppressed", msg=msg[:80])
+            return None
+        self._last_error_msg = msg
+        return msg
 
     def _make_stream_delta_message(self, text: str, content_index: int = 0) -> dict:
         """Create an incremental stream delta message for real-time streaming."""
