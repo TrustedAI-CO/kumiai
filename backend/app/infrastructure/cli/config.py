@@ -58,7 +58,7 @@ CODEAGENT_WRAPPER_BACKENDS = [BACKEND_CODEX, BACKEND_GEMINI, BACKEND_OPENCODE]
 DEFAULT_MODELS: Dict[str, str] = {
     BACKEND_CLAUDE: "sonnet",
     BACKEND_CODEX: "gpt-5.3-codex",
-    BACKEND_GEMINI: "gemini-2.5-pro",
+    BACKEND_GEMINI: "gemini-2.5-flash",
     BACKEND_OPENCODE: "",
 }
 

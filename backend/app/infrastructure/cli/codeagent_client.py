@@ -239,7 +239,7 @@ class CodeAgentWrapperClient:
                         continue
 
                     if self._in_error_block:
-                        if self._is_error_block_content(stripped):
+                        if self._is_error_block_content(line):
                             self._error_lines.append(stripped)
                             continue
                         else:
@@ -276,7 +276,7 @@ class CodeAgentWrapperClient:
                 self._error_lines = [stripped]
             elif not self._is_wrapper_noise(stripped):
                 if self._in_error_block:
-                    if self._is_error_block_content(stripped):
+                    if self._is_error_block_content(line_buffer):
                         self._error_lines.append(stripped)
                     else:
                         error_msg = self._flush_error_block()
@@ -498,6 +498,19 @@ class CodeAgentWrapperClient:
         r"|too many requests"                  # 429 messages
         r"|code.*:\s*\d{3}"                    # "code": 429
         r"|message.*:"                         # "message": "..."
+        # Node.js error object dump patterns (gaxios, fetch, etc.)
+        r"|^\s+\w+\s*:"                        # Indented JS property: "  key: value"
+        r"|Symbol\("                           # Symbol(...) properties
+        r"|\[Function"                         # [Function: name] references
+        r"|\[AbortSignal"                      # [AbortSignal] references
+        r"|\[PassThrough\]"                    # [PassThrough] stream references
+        r"|[\}\]]\s*,?\s*$"                    # Closing brace/bracket at end of line
+        r"|^\s*'[^']*'\s*\+\s*$"              # String concat continuation: '...' +
+        r"|^\s*\.\.\.\s*\d+\s*more"           # "... 6717 more characters"
+        r"|@type.*googleapis"                  # Google API error detail types
+        r"|domain.*:"                          # Error domain fields
+        r"|reason.*:"                          # Error reason fields
+        r"|metadata.*:"                        # Error metadata fields
         r")",
         re.IGNORECASE,
     )
@@ -515,8 +528,18 @@ class CodeAgentWrapperClient:
         return bool(self._ERROR_BLOCK_START_RE.search(line))
 
     def _is_error_block_content(self, line: str) -> bool:
-        """Check if line is part of an ongoing error block."""
-        return bool(self._ERROR_BLOCK_CONTENT_RE.search(line))
+        """Check if line is part of an ongoing error block.
+
+        Matches explicit error patterns first, then falls back to
+        treating indented lines as error continuation (Node.js error
+        dumps are always indented).
+        """
+        if self._ERROR_BLOCK_CONTENT_RE.search(line):
+            return True
+        # Fallback: indented lines are likely part of an error object dump
+        if line != line.lstrip() and len(line.strip()) > 0:
+            return True
+        return False
 
     def _flush_error_block(self) -> str:
         """Flush accumulated error lines and return a user-friendly error message."""

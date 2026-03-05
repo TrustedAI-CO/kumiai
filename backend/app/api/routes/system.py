@@ -216,7 +216,7 @@ def _get_claude_usage() -> CLIUsageInfo:
     plan = "unknown"
     plan_tier = ""
     auth_status = "not configured"
-    configured_model = "sonnet"
+    configured_model = DEFAULT_MODELS.get("claude", "sonnet")
     extra: Dict[str, Any] = {}
     rate_limits: Optional[RateLimitInfo] = None
 
@@ -290,7 +290,7 @@ def _get_codex_usage() -> CLIUsageInfo:
             name="codex", installed=False, auth_status="not installed"
         )
 
-    configured_model = "gpt-5.3-codex"
+    configured_model = DEFAULT_MODELS.get("codex", "")
     extra: Dict[str, Any] = {}
 
     codex_config = Path.home() / ".codex" / "config.toml"
@@ -328,7 +328,7 @@ def _get_gemini_usage() -> CLIUsageInfo:
             name="gemini", installed=False, auth_status="not installed"
         )
 
-    configured_model = "gemini-2.5-pro"
+    configured_model = DEFAULT_MODELS.get("gemini", "")
     extra: Dict[str, Any] = {}
     plan_tier = "free"
 
