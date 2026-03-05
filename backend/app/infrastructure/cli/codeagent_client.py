@@ -138,7 +138,11 @@ class CodeAgentWrapperClient:
 
         Yields message dicts compatible with KumiAI's event processing.
         """
-        # Wait for subprocess to be spawned (query() runs concurrently via create_task)
+        # Clear process_ready at the start so we always wait for the NEW subprocess.
+        # query() runs concurrently via create_task and will set() this after spawning.
+        self._process_ready.clear()
+
+        # Wait for subprocess to be spawned
         try:
             await asyncio.wait_for(self._process_ready.wait(), timeout=30.0)
         except asyncio.TimeoutError:
