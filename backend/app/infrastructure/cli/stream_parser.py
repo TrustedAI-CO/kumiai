@@ -9,6 +9,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from app.infrastructure.cli.config import BACKEND_CODEX, BACKEND_GEMINI
+
 
 @dataclass
 class ParsedEvent:
@@ -268,9 +270,9 @@ def parse_stream_line(line: str, backend: str = "claude") -> Optional[ParsedEven
         return None
 
     # Route to backend-specific parser
-    if backend == "gemini":
+    if backend == BACKEND_GEMINI:
         return parse_gemini_stream_event(data)
-    if backend == "codex":
+    if backend == BACKEND_CODEX:
         return parse_codex_stream_event(data)
 
     # Claude and fallback: try all parsers

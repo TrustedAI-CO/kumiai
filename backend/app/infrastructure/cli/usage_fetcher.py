@@ -4,6 +4,7 @@ Ported from craw-empire's credential-tools.ts + usage-cli-tools.ts.
 """
 
 import json
+import logging
 import os
 import platform
 import subprocess
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -159,8 +162,8 @@ async def _get_gemini_project_id(token: str) -> Optional[str]:
             if resp.status_code == 200:
                 data = resp.json()
                 return data.get("cloudaicompanionProject")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("gemini_project_id_fetch_failed", error=str(e))
 
     return None
 
@@ -205,7 +208,8 @@ async def fetch_claude_usage() -> UsageResult:
                         resets_at=entry.get("resets_at"),
                     ))
             return UsageResult(windows=windows)
-    except Exception:
+    except Exception as e:
+        logger.warning("claude_usage_fetch_failed", error=str(e))
         return UsageResult(error="unavailable")
 
 
@@ -250,7 +254,8 @@ async def fetch_codex_usage() -> UsageResult:
                 ))
 
             return UsageResult(windows=windows)
-    except Exception:
+    except Exception as e:
+        logger.warning("codex_usage_fetch_failed", error=str(e))
         return UsageResult(error="unavailable")
 
 
@@ -291,7 +296,8 @@ async def fetch_gemini_usage() -> UsageResult:
                     resets_at=bucket.get("resetTime"),
                 ))
             return UsageResult(windows=windows)
-    except Exception:
+    except Exception as e:
+        logger.warning("gemini_usage_fetch_failed", error=str(e))
         return UsageResult(error="unavailable")
 
 

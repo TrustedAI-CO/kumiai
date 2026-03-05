@@ -356,8 +356,17 @@ class CodeAgentWrapperClient:
         except asyncio.TimeoutError:
             return None
 
+    _MAX_QUERY_LENGTH = 100_000  # Guard against excessively large subprocess args
+
     def _build_command(self, message: str) -> List[str]:
         """Build the codeagent-wrapper command."""
+        if "\x00" in message:
+            raise ValueError("Query contains illegal null byte")
+        if len(message) > self._MAX_QUERY_LENGTH:
+            raise ValueError(
+                f"Query exceeds maximum length ({len(message)} > {self._MAX_QUERY_LENGTH})"
+            )
+
         cmd = [self._config.codeagent_wrapper_path]
         cmd.extend(["--backend", self._backend])
 
@@ -562,10 +571,17 @@ class CodeAgentWrapperClient:
         self._in_error_block = False
         self._error_lines = []
 
+        # Scrub potential bearer tokens before logging
+        scrubbed = re.sub(
+            r"(Bearer\s+|token[\"']?\s*[:=]\s*[\"']?)[A-Za-z0-9\-._~+/]+=*",
+            r"\1[REDACTED]",
+            raw_error[:200],
+            flags=re.IGNORECASE,
+        )
         logger.warning(
             "codeagent_error_block_detected",
             backend=self._backend,
-            error_preview=raw_error[:200],
+            error_preview=scrubbed,
         )
 
         # Extract a user-friendly message from the raw error

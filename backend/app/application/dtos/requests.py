@@ -1,9 +1,13 @@
 """Request DTOs for API endpoints."""
 
+import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+_VALID_CLI_BACKENDS = {"claude", "codex", "gemini", "opencode"}
+_MODEL_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]{0,99}$")
 
 
 class CreateSessionRequest(BaseModel):
@@ -181,6 +185,20 @@ class CreateAgentRequest(BaseModel):
     )
     icon_color: Optional[str] = Field("#4A90E2", description="Icon color (hex format)")
 
+    @field_validator("cli_backend")
+    @classmethod
+    def validate_cli_backend(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _VALID_CLI_BACKENDS:
+            raise ValueError(f"cli_backend must be one of {_VALID_CLI_BACKENDS}")
+        return v
+
+    @field_validator("default_model")
+    @classmethod
+    def validate_default_model(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _MODEL_NAME_RE.match(v):
+            raise ValueError("default_model contains invalid characters")
+        return v
+
 
 class UpdateAgentRequest(BaseModel):
     """Request to update an agent."""
@@ -191,9 +209,23 @@ class UpdateAgentRequest(BaseModel):
     default_model: Optional[str] = None
     tags: Optional[List[str]] = None
     skills: Optional[List[str]] = None
-    allowed_tools: Optional[str] = None
+    allowed_tools: Optional[List[str]] = None
     allowed_mcps: Optional[List[str]] = None
     icon_color: Optional[str] = None
+
+    @field_validator("cli_backend")
+    @classmethod
+    def validate_cli_backend(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _VALID_CLI_BACKENDS:
+            raise ValueError(f"cli_backend must be one of {_VALID_CLI_BACKENDS}")
+        return v
+
+    @field_validator("default_model")
+    @classmethod
+    def validate_default_model(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _MODEL_NAME_RE.match(v):
+            raise ValueError("default_model contains invalid characters")
+        return v
 
 
 class CreateMessageRequest(BaseModel):
