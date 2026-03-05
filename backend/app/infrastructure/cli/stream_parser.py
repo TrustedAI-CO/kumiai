@@ -114,12 +114,29 @@ def parse_gemini_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
             return ParsedEvent(event_type="text", content=content, raw=data)
         return None
 
+    if event_type == "error":
+        error_payload = data.get("error", data.get("message", "Gemini execution failed"))
+        if isinstance(error_payload, dict):
+            message = str(error_payload.get("message") or error_payload)
+        else:
+            message = str(error_payload)
+        return ParsedEvent(
+            event_type="error",
+            content=message,
+            raw=data,
+        )
+
     if event_type == "result":
         status = data.get("status", "")
         if status in ("error", "failed"):
+            error_payload = data.get("error", "Gemini execution failed")
+            if isinstance(error_payload, dict):
+                message = str(error_payload.get("message") or error_payload)
+            else:
+                message = str(error_payload)
             return ParsedEvent(
                 event_type="error",
-                content=data.get("error", "Gemini execution failed"),
+                content=message,
                 raw=data,
             )
         return ParsedEvent(
@@ -137,9 +154,40 @@ def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
     Codex events:
     - {"type":"thread.started","thread_id":"..."}
     - {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+    - {"type":"response.output_text.delta","delta":"..."}
     - {"type":"thread.completed","thread_id":"..."}
     - {"type":"turn.completed"}
     """
+
+    def _extract_text(value: Any) -> str:
+        """Extract plain text from Codex message payload variants."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return "".join(_extract_text(item) for item in value)
+        if isinstance(value, dict):
+            # Most direct string fields first
+            for key in ("text", "delta", "content"):
+                extracted = _extract_text(value.get(key))
+                if extracted:
+                    return extracted
+
+            # Codex message content can be a list of rich blocks
+            if isinstance(value.get("content"), list):
+                parts: List[str] = []
+                for block in value["content"]:
+                    if isinstance(block, dict):
+                        block_type = block.get("type", "")
+                        if block_type in ("output_text", "text", "input_text"):
+                            block_text = _extract_text(block.get("text"))
+                            if block_text:
+                                parts.append(block_text)
+                if parts:
+                    return "".join(parts)
+        return ""
+
     event_type = data.get("type", "")
 
     if event_type == "thread.started":
@@ -149,15 +197,36 @@ def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
             raw=data,
         )
 
+    # Newer Codex stream shape (incremental text chunks)
+    if event_type in ("response.output_text.delta", "message.delta"):
+        text = _extract_text(data.get("delta"))
+        if text:
+            return ParsedEvent(event_type="text", content=text, raw=data)
+        return None
+
     if event_type == "item.completed":
         item = data.get("item")
-        if isinstance(item, dict) and item.get("type") == "agent_message":
-            text = item.get("text", "")
-            if isinstance(text, list):
-                text = " ".join(str(t) for t in text)
-            if text:
-                return ParsedEvent(event_type="text", content=text, raw=data)
+        if isinstance(item, dict):
+            item_type = item.get("type")
+            if item_type in ("agent_message", "assistant_message", "message"):
+                text = _extract_text(item)
+                if text:
+                    return ParsedEvent(event_type="text", content=text, raw=data)
+            if item_type == "error":
+                error_msg = _extract_text(item.get("message")) or str(item)
+                return ParsedEvent(event_type="error", content=error_msg, raw=data)
         return None
+
+    if event_type == "error":
+        error_msg = _extract_text(data.get("message")) or str(data)
+        return ParsedEvent(event_type="error", content=error_msg, raw=data)
+
+    if event_type == "turn.failed":
+        error = data.get("error", {})
+        error_msg = _extract_text(error.get("message") if isinstance(error, dict) else error)
+        if not error_msg:
+            error_msg = str(data)
+        return ParsedEvent(event_type="error", content=error_msg, raw=data)
 
     if event_type in ("thread.completed", "turn.completed"):
         return ParsedEvent(
@@ -165,6 +234,13 @@ def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
             content="",
             raw=data,
         )
+
+    # Some wrappers may emit final output in alternate result events.
+    if event_type in ("response.completed", "message.completed"):
+        text = _extract_text(data.get("output") or data.get("message") or data.get("content"))
+        if text:
+            return ParsedEvent(event_type="text", content=text, raw=data)
+        return ParsedEvent(event_type="complete", content="", raw=data)
 
     return None
 
