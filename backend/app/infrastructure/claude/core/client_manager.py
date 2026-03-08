@@ -1,12 +1,16 @@
 """
-Claude SDK client manager.
+CLI client manager.
 
-Manages multiple Claude SDK clients (one per session) with agent configuration
+Manages multiple CLI backend clients (one per session) with agent configuration
 loading from the filesystem and SessionFactory integration.
+
+Supports:
+- Claude: Uses claude_agent_sdk (ClaudeClient) directly
+- Codex/Gemini/OpenCode: Uses codeagent-wrapper (CodeAgentWrapperClient)
 """
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, Union
 from uuid import UUID
 
 
@@ -21,20 +25,30 @@ from app.infrastructure.claude.exceptions import (
     ClientNotFoundError,
     ClaudeConnectionError,
 )
+from app.infrastructure.cli.config import (
+    BACKEND_CLAUDE,
+    CODEAGENT_WRAPPER_BACKENDS,
+    CLIBackendConfig,
+    DEFAULT_MODELS,
+)
+from app.infrastructure.cli.codeagent_client import CodeAgentWrapperClient
 from app.application.factories.session_factory import SessionFactory
 
 logger = get_logger(__name__)
 
+# Union type for all supported CLI clients
+CLIClient = Union[ClaudeClient, CodeAgentWrapperClient]
+
 
 class ClaudeClientManager:
     """
-    Manages multiple Claude SDK clients with agent-based configuration.
+    Manages multiple CLI backend clients with agent-based configuration.
 
     Responsibilities:
-    - Create Claude clients using SessionFactory
-    - Track session_id → client and claude_session_id mappings
+    - Create CLI clients (Claude SDK or codeagent-wrapper) using SessionFactory
+    - Route to appropriate backend based on agent's cli_backend setting
+    - Track session_id → client and session_id mappings
     - Handle client lifecycle (create, retrieve, cleanup)
-    - Integrate with unified session architecture
     """
 
     def __init__(
@@ -44,7 +58,7 @@ class ClaudeClientManager:
         config: ClaudeSettings,
     ) -> None:
         """
-        Initialize Claude client manager.
+        Initialize client manager.
 
         Args:
             agent_repo: Repository for loading agent configurations
@@ -54,19 +68,41 @@ class ClaudeClientManager:
         self._agent_repo = agent_repo
         self._skill_repo = skill_repo
         self._config = config
+        self._cli_config = CLIBackendConfig()
 
         # Initialize session factory
         self._session_factory = SessionFactory(agent_repo, skill_repo)
 
-        # Session tracking
-        self._clients: Dict[UUID, ClaudeClient] = {}
+        # Session tracking (supports both ClaudeClient and CodeAgentWrapperClient)
+        self._clients: Dict[UUID, CLIClient] = {}
         self._claude_sessions: Dict[UUID, str] = {}
 
         logger.info(
-            "claude_client_manager_initialized",
+            "client_manager_initialized",
             max_concurrent_sessions=config.max_concurrent_sessions,
             default_model=config.default_model,
         )
+
+    async def _resolve_agent_backend(
+        self, agent_id: Optional[str]
+    ) -> tuple[str, str]:
+        """Resolve CLI backend and model from agent configuration.
+
+        Returns:
+            Tuple of (cli_backend, model)
+        """
+        if not agent_id:
+            return BACKEND_CLAUDE, self._config.default_model
+
+        agent = await self._agent_repo.get_by_id(agent_id)
+        if not agent:
+            return BACKEND_CLAUDE, self._config.default_model
+
+        cli_backend = getattr(agent, "cli_backend", BACKEND_CLAUDE)
+        model = agent.default_model or DEFAULT_MODELS.get(
+            cli_backend, self._config.default_model
+        )
+        return cli_backend, model
 
     async def create_client_from_session(
         self,
@@ -74,112 +110,67 @@ class ClaudeClientManager:
         working_dir: Path,
         project_path: Optional[Path] = None,
         resume_session: Optional[str] = None,
-    ) -> ClaudeClient:
+    ) -> CLIClient:
         """
-        Create a new Claude client from a Session entity.
+        Create a new CLI client from a Session entity.
 
-        TEMPORARY: Copied from create_client() to incrementally add SessionFactory.
+        Routes to Claude SDK (for claude backend) or codeagent-wrapper
+        (for codex/gemini/opencode) based on agent's cli_backend setting.
 
         Args:
             session: Session domain entity
             working_dir: Working directory for the session
             project_path: Optional project root path
-            resume_session: Optional Claude session ID to resume
+            resume_session: Optional session ID to resume
 
         Returns:
-            Configured and connected Claude client
+            Configured and connected CLI client
 
         Raises:
             AgentNotFoundError: If agent not found
             ClaudeConnectionError: If connection fails
         """
-        # Extract parameters from session entity
         session_id = session.id
         agent_id = session.agent_id
-        # Test: Use working_dir (session subdir) as cwd instead of project_path
-        project_path_str = str(working_dir)
+
+        # Resolve which backend to use from agent config
+        cli_backend, model = await self._resolve_agent_backend(agent_id)
 
         try:
             logger.info(
-                "creating_claude_client_from_session",
+                "creating_client_from_session",
                 session_id=str(session_id),
                 agent_id=agent_id,
-                project_path=project_path_str,
+                cli_backend=cli_backend,
+                model=model,
                 resume=bool(resume_session),
             )
 
-            # Build ClaudeAgentOptions using SessionFactory
-            _, options = await self._session_factory.create_session(
-                session_type=session.session_type,
-                instance_id=str(session_id),
-                working_dir=working_dir,
-                agent_id=agent_id,
-                project_id=session.project_id,
-                project_path=project_path,
-                model=self._config.default_model,
-                resume_session_id=resume_session,
-            )
-
-            # Create client
-            client = ClaudeClient(
-                options=options,
-                timeout_seconds=self._config.connection_timeout_seconds,
-            )
-
-            # Connect with resume failure handling
-            try:
-                await client.connect()
-            except ClaudeConnectionError as e:
-                # Check if this is a resume failure
-                if resume_session and self._is_resume_failure(str(e)):
-                    logger.warning(
-                        "resume_failed_retrying_fresh",
-                        session_id=str(session_id),
-                        resume_session=resume_session,
-                        error=str(e),
-                    )
-
-                    # Clear stale claude_session_id from database
-                    await self._clear_stale_session_id(session_id)
-
-                    # Retry without resume using SessionFactory
-                    _, options_fresh = await self._session_factory.create_session(
-                        session_type=session.session_type,
-                        instance_id=str(session_id),
-                        working_dir=working_dir,
-                        agent_id=agent_id,
-                        project_id=session.project_id,
-                        project_path=project_path,
-                        model=self._config.default_model,
-                        resume_session_id=None,  # No resume
-                    )
-
-                    client = ClaudeClient(
-                        options=options_fresh,
-                        timeout_seconds=self._config.connection_timeout_seconds,
-                    )
-                    await client.connect()
-
-                    logger.info(
-                        "resume_failed_created_fresh_session",
-                        session_id=str(session_id),
-                    )
-                else:
-                    raise
+            if cli_backend in CODEAGENT_WRAPPER_BACKENDS:
+                client = await self._create_codeagent_client(
+                    session=session,
+                    working_dir=working_dir,
+                    cli_backend=cli_backend,
+                    model=model,
+                )
+            else:
+                client = await self._create_claude_client(
+                    session=session,
+                    working_dir=working_dir,
+                    project_path=project_path,
+                    model=model,
+                    resume_session=resume_session,
+                )
 
             # Store client
             self._clients[session_id] = client
 
-            # NOTE: We do NOT capture claude_session_id here because Claude SDK only
-            # sends session_id in the first RESPONSE message after a query is sent.
-            # At this point, we've only connected - no query sent yet.
-            # Session ID will be captured and saved by executor after first query/response.
-
             logger.info(
-                "claude_client_created",
+                "client_created",
                 session_id=str(session_id),
                 agent_id=agent_id,
-                model=self._config.default_model,
+                cli_backend=cli_backend,
+                model=model,
             )
 
             return client
@@ -193,20 +184,119 @@ class ClaudeClientManager:
                 "create_client_failed",
                 session_id=str(session_id),
                 agent_id=agent_id,
+                cli_backend=cli_backend,
                 error=str(e),
                 error_type=type(e).__name__,
             )
             raise
 
-    async def get_client(self, session_id: UUID) -> ClaudeClient:
+    async def _create_claude_client(
+        self,
+        session: Session,
+        working_dir: Path,
+        project_path: Optional[Path],
+        model: str,
+        resume_session: Optional[str],
+    ) -> ClaudeClient:
+        """Create a Claude SDK client."""
+        session_id = session.id
+
+        _, options = await self._session_factory.create_session(
+            session_type=session.session_type,
+            instance_id=str(session_id),
+            working_dir=working_dir,
+            agent_id=session.agent_id,
+            project_id=session.project_id,
+            project_path=project_path,
+            model=model,
+            resume_session_id=resume_session,
+        )
+
+        client = ClaudeClient(
+            options=options,
+            timeout_seconds=self._config.connection_timeout_seconds,
+        )
+
+        try:
+            await client.connect()
+        except ClaudeConnectionError as e:
+            if resume_session and self._is_resume_failure(str(e)):
+                logger.warning(
+                    "resume_failed_retrying_fresh",
+                    session_id=str(session_id),
+                    error=str(e),
+                )
+                await self._clear_stale_session_id(session_id)
+
+                _, options_fresh = await self._session_factory.create_session(
+                    session_type=session.session_type,
+                    instance_id=str(session_id),
+                    working_dir=working_dir,
+                    agent_id=session.agent_id,
+                    project_id=session.project_id,
+                    project_path=project_path,
+                    model=model,
+                    resume_session_id=None,
+                )
+                client = ClaudeClient(
+                    options=options_fresh,
+                    timeout_seconds=self._config.connection_timeout_seconds,
+                )
+                await client.connect()
+            else:
+                raise
+
+        return client
+
+    async def _create_codeagent_client(
+        self,
+        session: Session,
+        working_dir: Path,
+        cli_backend: str,
+        model: str,
+    ) -> CodeAgentWrapperClient:
+        """Create a codeagent-wrapper client for non-Claude backends."""
+        # Load agent for system prompt
+        system_prompt = None
+        allowed_tools = []
+        if session.agent_id:
+            agent = await self._agent_repo.get_by_id(session.agent_id)
+            if agent:
+                allowed_tools = agent.allowed_tools
+                # Load agent content for system prompt
+                try:
+                    from app.application.loaders.agent_loader import AgentLoader
+
+                    loader = AgentLoader(self._agent_repo)
+                    content = await loader.load_agent_content(session.agent_id)
+                    system_prompt = content
+                except Exception as e:
+                    logger.warning(
+                        "failed_to_load_agent_content_for_codeagent",
+                        agent_id=session.agent_id,
+                        error=str(e),
+                    )
+
+        client = CodeAgentWrapperClient(
+            backend=cli_backend,
+            model=model,
+            cwd=working_dir,
+            system_prompt=system_prompt,
+            allowed_tools=allowed_tools,
+            config=self._cli_config,
+        )
+        await client.connect()
+        return client
+
+    async def get_client(self, session_id: UUID) -> CLIClient:
         """
-        Retrieve existing Claude client for a session.
+        Retrieve existing CLI client for a session.
 
         Args:
             session_id: Session identifier
 
         Returns:
-            Claude client for the session
+            CLI client (ClaudeClient or CodeAgentWrapperClient)
 
         Raises:
             ClientNotFoundError: If no client exists for session

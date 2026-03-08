@@ -149,6 +149,11 @@ export function useStreamHandler({
           if (!hasMoreMessages) {
             setIsSending(false);
           }
+          // Always reload from DB on message_complete to catch any missed
+          // content_block events (e.g. due to SSE reconnection)
+          loadFromDB(instanceId).catch((err) => {
+            console.error('[Chat] Failed to reload messages on message_complete:', err);
+          });
           break;
 
         case 'tool_use':
@@ -210,6 +215,12 @@ export function useStreamHandler({
               setIsSending(true);
             } else if (sessionStatusEvent.status === 'idle' || sessionStatusEvent.status === 'error') {
               setIsSending(false);
+              // Reload from DB when session becomes idle to ensure all messages are visible
+              // This is a safety net for non-Claude backends where content_block
+              // SSE events may not arrive reliably
+              loadFromDB(instanceId).catch((err) => {
+                console.error('[Chat] Failed to reload messages on session idle:', err);
+              });
             }
           }
           break;

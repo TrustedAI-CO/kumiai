@@ -253,6 +253,8 @@ class SessionExecutor:
             )
 
             # Run and broadcast events
+            from app.infrastructure.sse.manager import sse_manager
+
             async for event in execution.run():
                 # Save messages to database at transitions (reuse same db session)
                 if event.type == "content_block" and event.block_type == "text":
@@ -274,14 +276,14 @@ class SessionExecutor:
                         context["db_lock"],
                     )
 
+                # Commit before broadcasting message_complete so that
+                # frontend loadFromDB can see the saved messages
+                if event.type == "message_complete":
+                    async with context["db_lock"]:
+                        await context["db_session"].commit()
+
                 # Broadcast to SSE
-                from app.infrastructure.sse.manager import sse_manager
-
                 await sse_manager.broadcast(session_id, event.to_sse())
-
-            # Commit all saves (with lock)
-            async with context["db_lock"]:
-                await context["db_session"].commit()
 
             # Update status to IDLE
             await self._update_session_status_after_execution(session_id, None)

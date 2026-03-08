@@ -16,6 +16,7 @@ class SessionDTO(TimestampedDTO):
     task_id: Optional[UUID] = None
     session_type: str
     status: str
+    cli_backend: str = "claude"
     claude_session_id: Optional[str]
     context: Dict[str, Any]
     error_message: Optional[str]
@@ -44,6 +45,7 @@ class SessionDTO(TimestampedDTO):
             task_id=entity.task_id,
             session_type=entity.session_type.value,
             status=entity.status.value,
+            cli_backend=entity.cli_backend,
             claude_session_id=entity.claude_session_id,
             context=entity.context,
             error_message=entity.error_message,

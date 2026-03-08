@@ -41,6 +41,7 @@ class SessionMapper:
             session_type=SessionType(model.session_type),
             status=SessionStatus(model.status),
             task_id=model.task_id,
+            cli_backend=getattr(model, "cli_backend", "claude") or "claude",
             claude_session_id=model.claude_session_id,
             context=model.context or {},
             error_message=model.error_message,
@@ -68,6 +69,7 @@ class SessionMapper:
         model.task_id = entity.task_id
         model.session_type = entity.session_type.value
         model.status = entity.status.value
+        model.cli_backend = entity.cli_backend
         model.claude_session_id = entity.claude_session_id
         # Create new dict to ensure SQLAlchemy detects JSONB changes
         model.context = dict(entity.context) if entity.context else {}

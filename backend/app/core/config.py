@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     cors_origins: List[str] = Field(
         default=[
             "http://localhost:1420",
+            "http://localhost:1421",
             "http://localhost:3000",
             "http://localhost:5173",
         ],

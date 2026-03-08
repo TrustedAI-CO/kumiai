@@ -4,6 +4,7 @@ import { api, Agent } from '@/lib/api';
 import { Avatar, DeleteButton } from '@/ui';
 import { ItemCard } from '@/ui';
 import { ListLayout } from '@/components/layout/ListLayout';
+import { CLIBackendBadge } from '@/components/ui/CLIBackendBadge';
 import { cn } from '@/lib/utils';
 
 interface AgentsListProps {
@@ -85,6 +86,7 @@ export function AgentsList({
               iconColor={agent.icon_color}
               onClick={() => onSelectAgent(agent.id)}
               isSelected={currentAgentId === agent.id}
+              badge={<CLIBackendBadge backend={agent.cli_backend} model={agent.default_model} />}
             />
             <DeleteButton
               onClick={(e) => {

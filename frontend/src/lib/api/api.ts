@@ -711,6 +711,27 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
   },
 
+  // CLI Backends
+  async getCLIBackends(): Promise<CLIBackendsResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/system/cli-backends`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  // CLI Usage
+  async getCLIUsage(): Promise<CLIUsageResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/system/cli-usage`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  // Live CLI Usage (real-time from provider APIs)
+  async getLiveCLIUsage(): Promise<LiveUsageResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/system/cli-usage/live`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   // Task Management
   async getProjectTasks(projectId: string): Promise<Task[]> {
     const res = await fetch(`${API_BASE}/api/v1/projects/${projectId}/tasks`);
@@ -837,6 +858,7 @@ export interface Agent {
   name: string;
   description?: string;
   file_path: string;
+  cli_backend: string;
   default_model: string;
   tags: string[];
   skills: string[];
@@ -850,6 +872,7 @@ export interface CreateAgentRequest {
   description?: string;
   id?: string;
   file_path?: string;
+  cli_backend?: string;
   default_model?: string;
   tags?: string[];
   skills?: string[];
@@ -861,12 +884,69 @@ export interface CreateAgentRequest {
 export interface UpdateAgentRequest {
   name?: string;
   description?: string;
+  cli_backend?: string;
   default_model?: string;
   tags?: string[];
   skills?: string[];
   allowed_tools?: string[];
   allowed_mcps?: string[];
   icon_color?: string;
+}
+
+// CLI Backend types
+export interface CLIBackendInfo {
+  name: string;
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+  default_model: string;
+  available_models: string[];
+}
+
+export interface CLIBackendsResponse {
+  backends: CLIBackendInfo[];
+  codeagent_wrapper_installed: boolean;
+  codeagent_wrapper_version: string | null;
+}
+
+export interface RateLimitInfo {
+  requests_per_minute: number | null;
+  input_tokens_per_minute: number | null;
+  output_tokens_per_minute: number | null;
+  requests_per_day: number | null;
+  tokens_per_day: number | null;
+  reset_window: string;
+}
+
+export interface CLIUsageInfo {
+  name: string;
+  installed: boolean;
+  plan: string;
+  plan_tier: string;
+  configured_model: string;
+  auth_status: string;
+  dashboard_url: string;
+  rate_limits: RateLimitInfo | null;
+  extra: Record<string, any>;
+}
+
+export interface CLIUsageResponse {
+  backends: CLIUsageInfo[];
+}
+
+export interface LiveUsageWindow {
+  label: string;
+  utilization: number;  // 0.0 – 1.0
+  resets_at: string | null;
+}
+
+export interface LiveUsageEntry {
+  windows: LiveUsageWindow[];
+  error: string | null;
+}
+
+export interface LiveUsageResponse {
+  usage: Record<string, LiveUsageEntry>;
 }
 
 // File info for agent/skill file trees
