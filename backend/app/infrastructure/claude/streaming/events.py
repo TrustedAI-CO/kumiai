@@ -269,6 +269,29 @@ class SessionStatusEvent:
         }
 
 
+@dataclass
+class TaskStatusEvent:
+    """Task status update triggered by session activity."""
+
+    task_id: str
+    status: str  # TaskStatus value: 'open', 'in_progress', 'done', 'archived'
+    project_id: str
+    type: Literal["task_status"] = "task_status"
+
+    def to_sse(self) -> Dict[str, Any]:
+        """Convert to SSE format."""
+        return {
+            "event": self.type,
+            "data": json.dumps(
+                {
+                    "task_id": self.task_id,
+                    "status": self.status,
+                    "project_id": self.project_id,
+                }
+            ),
+        }
+
+
 # Type alias for all event types
 SSEEvent = (
     StreamDeltaEvent
@@ -281,4 +304,5 @@ SSEEvent = (
     | UserMessageEvent
     | QueueStatusEvent
     | SessionStatusEvent
+    | TaskStatusEvent
 )
