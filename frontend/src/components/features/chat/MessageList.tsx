@@ -37,8 +37,8 @@ function groupMessages(messages: LocalMessage[]): (LocalMessage | LocalMessage[]
   let currentFromInstanceId: string | null | undefined = null;
 
   for (const msg of messages) {
-    if (msg.role === 'user') {
-      // User message: flush current group and add user message individually
+    if (msg.role === 'user' || msg.role === 'system') {
+      // User/system message: flush current group and add individually
       if (currentGroup.length > 0) {
         groups.push(currentGroup);
         currentGroup = [];

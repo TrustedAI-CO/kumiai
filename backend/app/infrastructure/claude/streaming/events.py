@@ -186,6 +186,33 @@ class ErrorEvent:
 
 
 @dataclass
+class RetryEvent:
+    """Execution retry triggered after a recoverable error."""
+
+    session_id: str
+    attempt: int
+    max_retries: int
+    error_type: str
+    corrective_message: str
+    type: Literal["retry"] = "retry"
+
+    def to_sse(self) -> Dict[str, Any]:
+        """Convert to SSE format."""
+        return {
+            "event": self.type,
+            "data": json.dumps(
+                {
+                    "session_id": self.session_id,
+                    "attempt": self.attempt,
+                    "max_retries": self.max_retries,
+                    "error_type": self.error_type,
+                    "corrective_message": self.corrective_message,
+                }
+            ),
+        }
+
+
+@dataclass
 class UserMessageEvent:
     """User message received (including cross-session messages)."""
 

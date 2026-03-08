@@ -82,7 +82,7 @@ class BatchMessageProcessor:
             first_msg = msgs[0]
 
             # Save user message using MessagePersistence
-            message_entity = await self._message_persistence.save_user_message(
+            message_entity = await self._message_persistence.save_message(
                 message_service=message_service,
                 message_repo=message_repo,
                 db_session=db_session,

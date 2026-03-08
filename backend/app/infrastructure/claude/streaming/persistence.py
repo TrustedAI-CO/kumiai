@@ -18,13 +18,14 @@ class MessagePersistence:
     ensure consistent sequence number handling.
     """
 
-    async def save_user_message(
+    async def save_message(
         self,
         message_service,
         message_repo,
         db_session,
         session_id: UUID,
         content: str,
+        role: MessageRole = MessageRole.USER,
         agent_id: Optional[str] = None,
         agent_name: Optional[str] = None,
         from_instance_id: Optional[UUID] = None,
@@ -56,7 +57,7 @@ class MessagePersistence:
         message_entity = MessageEntity(
             id=uuid4(),
             session_id=session_id,
-            role=MessageRole.USER,
+            role=role,
             content=content,
             sequence=next_sequence,
             agent_id=agent_id,
@@ -70,7 +71,7 @@ class MessagePersistence:
 
         # Log
         logger.info(
-            "USER_MESSAGE_SAVED",
+            "MESSAGE_SAVED",
             session_id=str(session_id),
             message_id=str(message_entity.id),
             sequence=next_sequence,
