@@ -5,8 +5,10 @@
  */
 
 import { useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEvent, ContentBlockEvent, AutoSaveEvent, UserNotificationEvent, UserMessageEvent, QueueStatusEvent, QueuedMessagePreview, ToolUseEvent, ToolCompleteEvent } from '@/types/session';
 import { desktopNotifications } from '@/lib/utils';
+import { queryKeys } from '@/lib/query/queryClient';
 
 /**
  * Simple LRU cache for event IDs to prevent memory leaks.
@@ -79,6 +81,8 @@ export function useStreamHandler({
   loadFromDB,
   instanceId,
 }: UseStreamHandlerOptions) {
+  const queryClient = useQueryClient();
+
   // Track the current response_id being streamed (null when not streaming)
   const currentResponseIdRef = useRef<string | null>(null);
 
@@ -222,11 +226,15 @@ export function useStreamHandler({
                 console.error('[Chat] Failed to reload messages on session idle:', err);
               });
             }
+          } else if ((event as any).type === 'task_status') {
+            const taskStatusEvent = event as any;
+            console.log('[Chat] Task status changed:', taskStatusEvent.task_id, '→', taskStatusEvent.status);
+            queryClient.invalidateQueries({ queryKey: queryKeys.tasks(taskStatusEvent.project_id) });
           }
           break;
       }
     },
-    [appendToAssistant, completeAssistantMessage, startAssistantMessage, addIncomingUserMessage, addToolUse, addToolComplete, onAutoSave, setIsSending, setError, setQueueSize, setQueuedMessages, loadFromDB, instanceId]
+    [appendToAssistant, completeAssistantMessage, startAssistantMessage, addIncomingUserMessage, addToolUse, addToolComplete, onAutoSave, setIsSending, setError, setQueueSize, setQueuedMessages, loadFromDB, instanceId, queryClient]
   );
 
   return handleStreamEvent;

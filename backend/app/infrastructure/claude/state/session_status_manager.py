@@ -12,9 +12,14 @@ from uuid import UUID
 
 from app.core.logging import get_logger
 from app.domain.value_objects import SessionStatus
+from app.domain.value_objects.task_status import TaskStatus
 from app.infrastructure.database.connection import get_repository_session
 from app.infrastructure.database.repositories import SessionRepositoryImpl
-from app.infrastructure.claude.streaming.events import SessionStatusEvent
+from app.infrastructure.database.repositories.task_repository import TaskRepositoryImpl
+from app.infrastructure.claude.streaming.events import (
+    SessionStatusEvent,
+    TaskStatusEvent,
+)
 from app.infrastructure.sse.manager import sse_manager
 
 logger = get_logger(__name__)
@@ -101,6 +106,8 @@ class SessionStatusManager:
         lock = await self._get_lock(session_id)
         async with lock:
             try:
+                task_id = None
+                project_id = None
                 async with get_repository_session() as db:
                     session_repo = SessionRepositoryImpl(db)
                     session_entity = await session_repo.get_by_id(session_id)
@@ -124,11 +131,59 @@ class SessionStatusManager:
                             "session_status_updated_to_working",
                             extra={"session_id": str(session_id)},
                         )
+
+                        task_id = session_entity.task_id
+                        project_id = session_entity.project_id
+
+                if task_id is not None:
+                    await self._auto_progress_task(session_id, task_id, project_id)
             except Exception as e:
                 logger.error(
                     "failed_to_update_session_status_to_working",
                     extra={"session_id": str(session_id), "error": str(e)},
                 )
+
+    async def _auto_progress_task(
+        self, session_id: UUID, task_id: UUID, project_id: UUID
+    ) -> None:
+        """Move task from OPEN to IN_PROGRESS when a session starts working.
+
+        Best-effort: errors here never block session startup.
+        Only transitions OPEN → IN_PROGRESS; DONE and ARCHIVED are left untouched.
+        """
+        try:
+            async with get_repository_session() as db:
+                task_repo = TaskRepositoryImpl(db)
+                task = await task_repo.get_by_id(task_id)
+                if task is None or task.status != TaskStatus.OPEN:
+                    return
+
+                task.start()
+                await task_repo.update(task)
+                await db.commit()
+
+                task_event = TaskStatusEvent(
+                    task_id=str(task_id),
+                    status=TaskStatus.IN_PROGRESS.value,
+                    project_id=str(project_id),
+                )
+                await sse_manager.broadcast(session_id, task_event.to_sse())
+                logger.info(
+                    "task_auto_progressed_to_in_progress",
+                    extra={
+                        "task_id": str(task_id),
+                        "session_id": str(session_id),
+                    },
+                )
+        except Exception as e:
+            logger.error(
+                "failed_to_auto_progress_task",
+                extra={
+                    "task_id": str(task_id),
+                    "session_id": str(session_id),
+                    "error": str(e),
+                },
+            )
 
     async def update_after_execution(
         self,
