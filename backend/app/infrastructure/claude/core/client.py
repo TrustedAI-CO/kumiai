@@ -12,6 +12,7 @@ import asyncio
 from typing import AsyncIterator, AsyncIterable, Optional, Union
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk._errors import CLIJSONDecodeError, ClaudeSDKError
 
 from app.core.logging import get_logger
 from app.infrastructure.claude.exceptions import (
@@ -103,6 +104,8 @@ class ClaudeClient:
                 logger.debug("claude_streaming_query_sent")
             await self._client.query(message)
 
+        except ClaudeSDKError:
+            raise  # preserve SDK error type for retry classification
         except Exception as e:
             logger.error(
                 "claude_query_failed",
@@ -174,7 +177,14 @@ class ClaudeClient:
 
                 yield message
 
+        except ClaudeSDKError:
+            raise  # preserve SDK error type for retry classification
         except Exception as e:
+            # The SDK internally converts CLIJSONDecodeError to a plain Exception
+            # with the error string. Re-raise as the proper type so the retry
+            # classifier can identify it.
+            if "maximum buffer size" in str(e):
+                raise CLIJSONDecodeError(str(e), e) from e
             logger.error(
                 "claude_receive_failed",
                 error=str(e),

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     session_cleanup_interval: int = Field(
         default=300, description="Session cleanup interval in seconds"
     )
+    max_execution_retries: int = Field(
+        default=3, description="Max retries per execution for recoverable errors"
+    )
 
     # Feature Flags
     enable_mcp: bool = Field(default=True, description="Enable MCP servers")

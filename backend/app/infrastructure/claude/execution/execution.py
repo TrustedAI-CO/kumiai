@@ -301,12 +301,20 @@ class Execution:
             message_repo = MessageRepositoryImpl(self.db_session)
             message_persistence = MessagePersistence()
 
-            message_entity = await message_persistence.save_user_message(
+            from app.domain.value_objects import MessageRole
+
+            role = (
+                MessageRole.SYSTEM
+                if queued_msg.sender_name == "system"
+                else MessageRole.USER
+            )
+            message_entity = await message_persistence.save_message(
                 message_service=self.message_service,
                 message_repo=message_repo,
                 db_session=self.db_session,
                 session_id=self.session_id,
                 content=queued_msg.message,
+                role=role,
                 agent_id=queued_msg.sender_agent_id,
                 agent_name=queued_msg.sender_name,
                 from_instance_id=queued_msg.sender_session_id,

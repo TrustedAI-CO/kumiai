@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Terminal } from 'lucide-react';
 import { Avatar } from '@/ui';
 import type { Message, FileAttachment as StructuredFileAttachment } from '@/types/chat';
 import type { Agent } from '@/lib/api';
@@ -13,6 +14,35 @@ import { renderToolWidget } from '@/features/tool-widgets';
 import { markdownComponents } from '@/lib/utils/markdownComponents';
 import { getMessageSenderDisplayInfo } from '@/lib/utils/agentUtils';
 import { CrossInstanceIndicator } from './CrossInstanceIndicator';
+
+function SystemMessage({ content, timestamp }: { content: string; timestamp: Date }) {
+  const text = content.replace(/^\[System\]\s*/i, '');
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="group px-5 py-1"
+    >
+      <div className="w-full max-w-full flex items-start gap-2">
+        {/* System icon — same size as Avatar (w-8 h-8) */}
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-100 flex-shrink-0">
+          <Terminal size={16} className="text-gray-500" />
+        </div>
+
+        {/* Content column */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="type-subtitle text-gray-500 font-sans">System</span>
+            <span className="type-caption text-gray-400">
+              {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <p className="type-body-sm text-gray-500 leading-relaxed whitespace-pre-wrap">{text}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 // Parse file attachments from message content
 function parseFileAttachments(content: string): { text: string; files: StructuredFileAttachment[] } {
@@ -329,21 +359,7 @@ export const MessageBubble = memo(function MessageBubble({ message, role, agents
   }
 
   if (message.role === 'system') {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="px-5 py-2"
-      >
-        <div className="flex items-center justify-center">
-          <div className="px-4 py-1.5 bg-yellow-50 border border-yellow-200 rounded-full">
-            <p className="type-caption text-yellow-800 text-center whitespace-pre-wrap">
-              {message.content}
-            </p>
-          </div>
-        </div>
-      </motion.div>
-    );
+    return <SystemMessage content={message.content} timestamp={message.timestamp} />;
   }
 
   return null;

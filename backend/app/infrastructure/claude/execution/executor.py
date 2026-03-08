@@ -204,16 +204,30 @@ class SessionExecutor:
 
     async def _execute_session(self, session_id: UUID) -> None:
         """
-        Execute one session lifecycle.
+        Execute one session lifecycle with retry on recoverable errors.
 
         SIMPLIFIED: Load context, create Execution, run, cleanup.
+        Retries up to settings.max_execution_retries times on recoverable errors,
+        injecting a corrective message so Claude can adapt its approach.
         """
+        from app.infrastructure.claude.execution.retry import (
+            RetryClassifier,
+            RetryState,
+        )
+        from app.infrastructure.claude.execution.hooks import (
+            register_pending_execution,
+            unregister_execution,
+        )
+        from app.infrastructure.sse.manager import sse_manager
+        from app.infrastructure.claude.streaming.events import RetryEvent
+        from app.core.config import settings
+
         context = None
         try:
             # Update status
             await self._update_session_status_to_working(session_id)
 
-            # Load execution context
+            # Load execution context once — reused across retries
             context = await self._load_execution_context(session_id)
 
             # Setup MCP tool context (for PM tools, etc.)
@@ -223,116 +237,169 @@ class SessionExecutor:
                 context["session_service"],
             )
 
-            # Create execution
-            execution = Execution(
-                session_id=session_id,
-                client=context["client"],
-                queue=self._queue_manager.get_queue(session_id),
-                message_service=context["message_service"],
-                db_session=context["db_session"],
-                session_entity=context["session_entity"],
-                db_lock=context["db_lock"],
-                on_queue_change=lambda: self._broadcast_queue_status(session_id),
-            )
+            retry_state = RetryState(max_retries=settings.max_execution_retries)
+            classifier = RetryClassifier()
 
-            # Register execution for hooks (pending - will be moved to main registry on first hook)
-            from app.infrastructure.claude.execution.hooks import (
-                register_pending_execution,
-            )
-
-            # Extract project_id and source_instance_id from session entity
-            project_id = (
-                str(context["session_entity"].project_id)
-                if context["session_entity"].project_id
-                else None
-            )
-            source_instance_id = str(session_id)  # Use session_id as source_instance_id
-
-            register_pending_execution(
-                str(session_id), execution, project_id, source_instance_id
-            )
-
-            # Run and broadcast events
-            from app.infrastructure.sse.manager import sse_manager
-
-            async for event in execution.run():
-                # Save messages to database at transitions (reuse same db session)
-                if event.type == "content_block" and event.block_type == "text":
-                    await self._save_assistant_message(
-                        session_id,
-                        context["session_entity"],
-                        event,
-                        context["message_service"],
-                        context["db_session"],
-                        context["db_lock"],
-                    )
-                elif event.type == "tool_use":
-                    await self._save_tool_message(
-                        session_id,
-                        context["session_entity"],
-                        event,
-                        context["message_service"],
-                        context["db_session"],
-                        context["db_lock"],
-                    )
-
-                # Commit before broadcasting message_complete so that
-                # frontend loadFromDB can see the saved messages
-                if event.type == "message_complete":
-                    async with context["db_lock"]:
-                        await context["db_session"].commit()
-
-                # Broadcast to SSE
-                await sse_manager.broadcast(session_id, event.to_sse())
-
-            # Update status to IDLE
-            await self._update_session_status_after_execution(session_id, None)
-
-        except Exception as e:
-            # Check if this is a SIGINT (Ctrl+C / exit code -2) - treat as graceful shutdown
-            error_msg = str(e)
-            is_sigint = "exit code -2" in error_msg or "SIGINT" in error_msg
-
-            if is_sigint:
-                logger.warning(
-                    "execution_interrupted_by_signal",
-                    extra={
-                        "session_id": str(session_id),
-                        "signal": "SIGINT (Ctrl+C)",
-                    },
+            while True:
+                execution = Execution(
+                    session_id=session_id,
+                    client=context["client"],
+                    queue=self._queue_manager.get_queue(session_id),
+                    message_service=context["message_service"],
+                    db_session=context["db_session"],
+                    session_entity=context["session_entity"],
+                    db_lock=context["db_lock"],
+                    on_queue_change=lambda: self._broadcast_queue_status(session_id),
                 )
-                # Rollback and set to IDLE (not ERROR) for graceful interruption
-                if context and context.get("db_session"):
-                    await context["db_session"].rollback()
-                # Don't update status - it may already be IDLE from Stop hook
-                # await self._update_session_status_after_execution(session_id, None)
-            else:
-                logger.error(
-                    "execution_failed",
-                    extra={
-                        "session_id": str(session_id),
-                        "error": error_msg,
-                        "error_type": type(e).__name__,
-                    },
-                    exc_info=True,
+
+                # Extract project_id and source_instance_id from session entity
+                project_id = (
+                    str(context["session_entity"].project_id)
+                    if context["session_entity"].project_id
+                    else None
                 )
-                # Rollback on error
-                if context and context.get("db_session"):
-                    await context["db_session"].rollback()
-                # Update status to ERROR
-                await self._update_session_status_after_execution(session_id, e)
-                raise
+                source_instance_id = str(session_id)
+
+                register_pending_execution(
+                    str(session_id), execution, project_id, source_instance_id
+                )
+
+                try:
+                    async for event in execution.run():
+                        # Save messages to database at transitions
+                        if event.type == "content_block" and event.block_type == "text":
+                            await self._save_assistant_message(
+                                session_id,
+                                context["session_entity"],
+                                event,
+                                context["message_service"],
+                                context["db_session"],
+                                context["db_lock"],
+                            )
+                        elif event.type == "tool_use":
+                            await self._save_tool_message(
+                                session_id,
+                                context["session_entity"],
+                                event,
+                                context["message_service"],
+                                context["db_session"],
+                                context["db_lock"],
+                            )
+
+                        # Commit before broadcasting message_complete so that
+                        # frontend loadFromDB can see the saved messages
+                        if event.type == "message_complete":
+                            async with context["db_lock"]:
+                                await context["db_session"].commit()
+
+                        # Broadcast to SSE
+                        await sse_manager.broadcast(session_id, event.to_sse())
+
+                    # Success — exit retry loop
+                    await self._update_session_status_after_execution(session_id, None)
+                    break
+
+                except asyncio.CancelledError:
+                    raise  # Never retry cancellation
+
+                except Exception as e:
+                    unregister_execution(str(session_id))
+
+                    error_msg = str(e)
+                    is_sigint = "exit code -2" in error_msg or "SIGINT" in error_msg
+
+                    if is_sigint:
+                        logger.warning(
+                            "execution_interrupted_by_signal",
+                            extra={
+                                "session_id": str(session_id),
+                                "signal": "SIGINT (Ctrl+C)",
+                            },
+                        )
+                        if context.get("db_session"):
+                            await context["db_session"].rollback()
+                        break
+
+                    decision = classifier.classify(e)
+                    retry_state.record_attempt()
+
+                    if decision.retryable and retry_state.can_retry():
+                        logger.warning(
+                            "execution_retrying",
+                            extra={
+                                "session_id": str(session_id),
+                                "error_type": decision.error_label,
+                                "attempt": retry_state.attempt,
+                                "max_retries": retry_state.max_retries,
+                            },
+                        )
+
+                        if context.get("db_session"):
+                            await context["db_session"].rollback()
+
+                        # Broadcast retry event to frontend
+                        retry_event = RetryEvent(
+                            session_id=str(session_id),
+                            attempt=retry_state.attempt,
+                            max_retries=retry_state.max_retries,
+                            error_type=decision.error_label,
+                            corrective_message=decision.corrective_message,
+                        )
+                        await sse_manager.broadcast(session_id, retry_event.to_sse())
+
+                        # Backoff before retry
+                        delay = retry_state.get_delay()
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+
+                        # Capture claude_session_id from the dying client before
+                        # removing it — session_entity has a stale value from load time
+                        claude_session_id = await self.get_claude_session_id(session_id)
+
+                        # Replace the dead client with a fresh one that resumes
+                        # from the captured claude_session_id
+                        await self._client_manager.remove_client(session_id)
+                        context["client"] = await self._get_or_create_client(
+                            session_id,
+                            context["session_entity"].agent_id,
+                            context["project_path"],
+                            context["session_dir"],
+                            claude_session_id,
+                        )
+
+                        # Inject corrective message so Claude adapts on resume
+                        corrective = QueuedMessage(
+                            message=decision.corrective_message,
+                            sender_name="system",
+                            sender_session_id=None,
+                            sender_agent_id=None,
+                        )
+                        await self._queue_manager.get_queue(session_id).put(corrective)
+                        continue
+
+                    # Non-retryable or retries exhausted
+                    logger.error(
+                        "execution_failed",
+                        extra={
+                            "session_id": str(session_id),
+                            "error": error_msg,
+                            "error_type": type(e).__name__,
+                            "attempts": retry_state.attempt,
+                        },
+                        exc_info=True,
+                    )
+                    if context.get("db_session"):
+                        await context["db_session"].rollback()
+                    await self._update_session_status_after_execution(session_id, e)
+                    raise
 
         finally:
-            # Unregister execution from hooks
             from app.infrastructure.claude.execution.hooks import unregister_execution
 
             unregister_execution(str(session_id))
 
-            # Close database session
             if context and context.get("db_session"):
                 await context["db_session"].close()
-            # Cleanup
             await self._cleanup_execution(session_id)
 
     async def _cleanup_execution(self, session_id: UUID) -> None:
@@ -432,6 +499,8 @@ class SessionExecutor:
             "message_service": message_service,
             "session_entity": session_entity,
             "db_lock": asyncio.Lock(),  # Prevent concurrent db operations
+            "project_path": project_path,
+            "session_dir": session_dir,
         }
 
     async def _get_or_create_client(
