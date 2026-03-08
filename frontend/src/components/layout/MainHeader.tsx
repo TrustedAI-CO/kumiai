@@ -1,5 +1,11 @@
 import { ReactNode } from 'react';
 import { PanelLeft, PanelRight, PanelLeftClose, PanelRightClose, ChevronRight, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface BreadcrumbSegment {
+  label: string;
+  onClick?: () => void;
+}
 
 interface MainHeaderProps {
   title: string;
@@ -12,7 +18,9 @@ interface MainHeaderProps {
   onToggleLeftSidebar?: () => void;
   rightSidebarOpen?: boolean;
   onToggleRightSidebar?: () => void;
-  breadcrumb?: string; // Optional breadcrumb before title (e.g., project name)
+  breadcrumb?: string;
+  breadcrumbOnClick?: () => void;
+  breadcrumbs?: BreadcrumbSegment[];
 }
 
 export function MainHeader({
@@ -26,8 +34,12 @@ export function MainHeader({
   onToggleLeftSidebar,
   rightSidebarOpen,
   onToggleRightSidebar,
-  breadcrumb
+  breadcrumb,
+  breadcrumbOnClick,
+  breadcrumbs,
 }: MainHeaderProps) {
+  const hasBreadcrumb = !!(breadcrumb || breadcrumbs?.length);
+
   return (
     <div className="flex-shrink-0 bg-white h-14 px-6">
       <div className="flex items-center justify-between h-full">
@@ -47,15 +59,45 @@ export function MainHeader({
             </button>
           )}
 
-          {/* Breadcrumb layout for session views */}
-          {breadcrumb ? (
+          {hasBreadcrumb ? (
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="type-body-sm text-muted-foreground flex-shrink-0">{breadcrumb}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              {breadcrumbs
+                ? breadcrumbs.map((segment, i) => (
+                    <span key={i} className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={segment.onClick}
+                        disabled={!segment.onClick}
+                        className={cn(
+                          'type-body-sm text-muted-foreground',
+                          segment.onClick && 'hover:text-foreground transition-colors cursor-pointer'
+                        )}
+                      >
+                        {segment.label}
+                      </button>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </span>
+                  ))
+                : (
+                    <span className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={breadcrumbOnClick}
+                        disabled={!breadcrumbOnClick}
+                        className={cn(
+                          'type-body-sm text-muted-foreground',
+                          breadcrumbOnClick && 'hover:text-foreground transition-colors cursor-pointer'
+                        )}
+                      >
+                        {breadcrumb}
+                      </button>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </span>
+                  )
+              }
               <h1 className="type-body-sm text-muted-foreground truncate">{title}</h1>
             </div>
           ) : (
-            /* Standard layout with icon */
             <>
               {icon && <div className="flex-shrink-0">{icon}</div>}
               <div className="min-w-0">
@@ -69,16 +111,15 @@ export function MainHeader({
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Avatar and close button for breadcrumb layout */}
-          {breadcrumb && (
+          {hasBreadcrumb && (
             <>
               {icon && <div className="flex-shrink-0">{icon}</div>}
               {showBackButton && onBack && (
                 <button
                   onClick={onBack}
                   className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                  aria-label="Close session"
-                  title="Close session"
+                  aria-label="Close"
+                  title="Close"
                 >
                   <X className="w-4 h-4 text-muted-foreground" />
                 </button>

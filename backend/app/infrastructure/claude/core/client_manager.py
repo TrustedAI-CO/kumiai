@@ -10,7 +10,7 @@ Supports:
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 from uuid import UUID
 
 
@@ -83,9 +83,7 @@ class ClaudeClientManager:
             default_model=config.default_model,
         )
 
-    async def _resolve_agent_backend(
-        self, agent_id: Optional[str]
-    ) -> tuple[str, str]:
+    async def _resolve_agent_backend(self, agent_id: Optional[str]) -> tuple[str, str]:
         """Resolve CLI backend and model from agent configuration.
 
         Returns:

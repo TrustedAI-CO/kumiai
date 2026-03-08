@@ -19,7 +19,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ChatContext } from '@/types/chat';
 
-export type ViewMode = 'kanban' | 'chat' | 'file';
+export type ViewMode = 'kanban' | 'task-sessions' | 'chat' | 'file';
 export type BoardViewMode = 'kanban' | 'table';
 
 interface WorkspaceState {

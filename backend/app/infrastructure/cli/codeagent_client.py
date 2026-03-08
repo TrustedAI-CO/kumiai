@@ -158,7 +158,10 @@ class CodeAgentWrapperClient:
             await asyncio.wait_for(self._process_ready.wait(), timeout=30.0)
         except asyncio.TimeoutError:
             logger.error("codeagent_process_ready_timeout", backend=self._backend)
-            yield {"type": "error", "error": {"message": "Subprocess failed to start within 30s"}}
+            yield {
+                "type": "error",
+                "error": {"message": "Subprocess failed to start within 30s"},
+            }
             return
 
         if not self._process or not self._process.stdout:
@@ -224,7 +227,7 @@ class CodeAgentWrapperClient:
                     if first_line:
                         first_line = False
                         if self._query_text and stripped.startswith(self._query_text):
-                            remainder = stripped[len(self._query_text):]
+                            remainder = stripped[len(self._query_text) :]
                             if remainder:
                                 yield self._make_stream_delta_message(remainder + "\n")
                                 yield self._make_content_block_stop_message()
@@ -466,7 +469,7 @@ class CodeAgentWrapperClient:
         "Log:",
         "SESSION_ID:",
         "Attempt ",  # Retry messages like "Attempt 1 failed with status 429"
-        "    at ",   # Stack trace lines
+        "    at ",  # Stack trace lines
     )
     _WRAPPER_NOISE_EXACT = {"---"}
 
@@ -474,22 +477,22 @@ class CodeAgentWrapperClient:
     _ERROR_BLOCK_START_RE = re.compile(
         r"(?:"
         r"GoogleGenerativeAI(?:Fetch)?Error"  # Gemini errors
-        r"|GaxiosError"                        # Google HTTP client errors
-        r"|Error:\s"                           # Generic "Error: ..." lines
-        r"|FetchError"                         # Node.js fetch errors
-        r"|APIError"                           # OpenAI/API errors
-        r"|RateLimitError"                     # Rate limit errors
-        r"|ServiceUnavailableError"            # Service unavailable
-        r"|InternalServerError"                # Server errors
-        r"|TimeoutError"                       # Timeout errors
-        r"|ECONNREFUSED"                       # Connection refused
-        r"|ETIMEDOUT"                          # Connection timeout
-        r"|model.*not found"                   # Model not found errors
-        r"|quota.*exceeded"                    # Quota exceeded
-        r'|^\s*"error"\s*:\s*\{'               # JSON error object: "error": {
-        r"|RESOURCE_EXHAUSTED"                 # Google API exhausted status
-        r"|MODEL_CAPACITY_EXHAUSTED"           # Gemini capacity exhausted
-        r"|No capacity available"              # Gemini capacity message
+        r"|GaxiosError"  # Google HTTP client errors
+        r"|Error:\s"  # Generic "Error: ..." lines
+        r"|FetchError"  # Node.js fetch errors
+        r"|APIError"  # OpenAI/API errors
+        r"|RateLimitError"  # Rate limit errors
+        r"|ServiceUnavailableError"  # Service unavailable
+        r"|InternalServerError"  # Server errors
+        r"|TimeoutError"  # Timeout errors
+        r"|ECONNREFUSED"  # Connection refused
+        r"|ETIMEDOUT"  # Connection timeout
+        r"|model.*not found"  # Model not found errors
+        r"|quota.*exceeded"  # Quota exceeded
+        r'|^\s*"error"\s*:\s*\{'  # JSON error object: "error": {
+        r"|RESOURCE_EXHAUSTED"  # Google API exhausted status
+        r"|MODEL_CAPACITY_EXHAUSTED"  # Gemini capacity exhausted
+        r"|No capacity available"  # Gemini capacity message
         r")",
         re.IGNORECASE,
     )
@@ -497,39 +500,39 @@ class CodeAgentWrapperClient:
     # Patterns for lines that are part of an ongoing error block
     _ERROR_BLOCK_CONTENT_RE = re.compile(
         r"(?:"
-        r'^\s*"[a-zA-Z_]+"\s*:'              # JSON key-value: "error": ...
-        r"|^\s*[\{\}\[\]]"                     # JSON structure chars
-        r"|^\s+at\s"                           # Stack trace: "    at ..."
-        r"|^\s*\d+\s*\|"                       # Source code context in errors
-        r"|status.*:\s*\d{3}"                  # HTTP status lines
-        r"|statusText"                         # HTTP status text
-        r"|headers.*:"                         # HTTP headers
-        r"|config.*:"                          # HTTP config
-        r"|request.*:"                         # HTTP request
-        r"|response.*:"                        # HTTP response
-        r"|data.*:"                            # HTTP data
-        r"|url.*:"                             # URL lines
-        r"|method.*:"                          # HTTP method
-        r"|RESOURCE_EXHAUSTED"                 # Google API exhausted
-        r"|MODEL_CAPACITY_EXHAUSTED"           # Gemini capacity
-        r"|RATE_LIMIT"                         # Rate limit markers
-        r"|retry.*after"                       # Retry-after hints
-        r"|too many requests"                  # 429 messages
-        r"|code.*:\s*\d{3}"                    # "code": 429
-        r"|message.*:"                         # "message": "..."
+        r'^\s*"[a-zA-Z_]+"\s*:'  # JSON key-value: "error": ...
+        r"|^\s*[\{\}\[\]]"  # JSON structure chars
+        r"|^\s+at\s"  # Stack trace: "    at ..."
+        r"|^\s*\d+\s*\|"  # Source code context in errors
+        r"|status.*:\s*\d{3}"  # HTTP status lines
+        r"|statusText"  # HTTP status text
+        r"|headers.*:"  # HTTP headers
+        r"|config.*:"  # HTTP config
+        r"|request.*:"  # HTTP request
+        r"|response.*:"  # HTTP response
+        r"|data.*:"  # HTTP data
+        r"|url.*:"  # URL lines
+        r"|method.*:"  # HTTP method
+        r"|RESOURCE_EXHAUSTED"  # Google API exhausted
+        r"|MODEL_CAPACITY_EXHAUSTED"  # Gemini capacity
+        r"|RATE_LIMIT"  # Rate limit markers
+        r"|retry.*after"  # Retry-after hints
+        r"|too many requests"  # 429 messages
+        r"|code.*:\s*\d{3}"  # "code": 429
+        r"|message.*:"  # "message": "..."
         # Node.js error object dump patterns (gaxios, fetch, etc.)
-        r"|^\s+\w+\s*:"                        # Indented JS property: "  key: value"
-        r"|Symbol\("                           # Symbol(...) properties
-        r"|\[Function"                         # [Function: name] references
-        r"|\[AbortSignal"                      # [AbortSignal] references
-        r"|\[PassThrough\]"                    # [PassThrough] stream references
-        r"|[\}\]]\s*,?\s*$"                    # Closing brace/bracket at end of line
-        r"|^\s*'[^']*'\s*\+\s*$"              # String concat continuation: '...' +
-        r"|^\s*\.\.\.\s*\d+\s*more"           # "... 6717 more characters"
-        r"|@type.*googleapis"                  # Google API error detail types
-        r"|domain.*:"                          # Error domain fields
-        r"|reason.*:"                          # Error reason fields
-        r"|metadata.*:"                        # Error metadata fields
+        r"|^\s+\w+\s*:"  # Indented JS property: "  key: value"
+        r"|Symbol\("  # Symbol(...) properties
+        r"|\[Function"  # [Function: name] references
+        r"|\[AbortSignal"  # [AbortSignal] references
+        r"|\[PassThrough\]"  # [PassThrough] stream references
+        r"|[\}\]]\s*,?\s*$"  # Closing brace/bracket at end of line
+        r"|^\s*'[^']*'\s*\+\s*$"  # String concat continuation: '...' +
+        r"|^\s*\.\.\.\s*\d+\s*more"  # "... 6717 more characters"
+        r"|@type.*googleapis"  # Google API error detail types
+        r"|domain.*:"  # Error domain fields
+        r"|reason.*:"  # Error reason fields
+        r"|metadata.*:"  # Error metadata fields
         r")",
         re.IGNORECASE,
     )
@@ -594,7 +597,9 @@ class CodeAgentWrapperClient:
             msg = "API rate limit exceeded. The model is currently at capacity. Please wait a moment and try again."
         elif re.search(r"500|INTERNAL", raw_error, re.IGNORECASE):
             msg = "The AI backend returned an internal server error. Please try again."
-        elif re.search(r"503|SERVICE_UNAVAILABLE|UNAVAILABLE", raw_error, re.IGNORECASE):
+        elif re.search(
+            r"503|SERVICE_UNAVAILABLE|UNAVAILABLE", raw_error, re.IGNORECASE
+        ):
             msg = "The AI backend is temporarily unavailable. Please try again later."
         elif re.search(r"timeout|ETIMEDOUT|ECONNREFUSED", raw_error, re.IGNORECASE):
             msg = "Connection to the AI backend timed out. Please try again."

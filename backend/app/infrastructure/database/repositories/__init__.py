@@ -9,6 +9,7 @@ from app.infrastructure.database.repositories.project_repository import (
 from app.infrastructure.database.repositories.session_repository import (
     SessionRepositoryImpl,
 )
+from app.infrastructure.database.repositories.task_repository import TaskRepositoryImpl
 from app.infrastructure.database.repositories.user_profile_repository import (
     PostgresUserProfileRepository,
 )
@@ -23,5 +24,6 @@ __all__ = [
     "MessageRepositoryImpl",
     "ProjectRepositoryImpl",
     "SessionRepositoryImpl",
+    "TaskRepositoryImpl",
     "PostgresUserProfileRepository",
 ]

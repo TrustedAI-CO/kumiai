@@ -10,7 +10,10 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.infrastructure.cli.config import AVAILABLE_MODELS, DEFAULT_MODELS
-from app.infrastructure.cli.detector import detect_all_backends, detect_codeagent_wrapper
+from app.infrastructure.cli.detector import (
+    detect_all_backends,
+    detect_codeagent_wrapper,
+)
 from app.infrastructure.database.connection import get_engine
 from app.infrastructure.database.models import Base
 
@@ -64,8 +67,6 @@ async def get_version_info() -> dict:
     """Get version info with last modification timestamps for frontend and backend."""
     import os
     import time
-
-    project_root = Path(settings.kumiai_home).parent
 
     def get_latest_mtime(directory: Path, extensions: tuple) -> str | None:
         """Find the most recent modification time in a directory."""
@@ -286,9 +287,7 @@ def _get_codex_usage() -> CLIUsageInfo:
     import shutil as sh
 
     if not sh.which("codex"):
-        return CLIUsageInfo(
-            name="codex", installed=False, auth_status="not installed"
-        )
+        return CLIUsageInfo(name="codex", installed=False, auth_status="not installed")
 
     configured_model = DEFAULT_MODELS.get("codex", "")
     extra: Dict[str, Any] = {}
@@ -299,7 +298,11 @@ def _get_codex_usage() -> CLIUsageInfo:
             content = codex_config.read_text()
             for line in content.splitlines():
                 line = line.strip()
-                if line.startswith("model") and "=" in line and not line.startswith("model_"):
+                if (
+                    line.startswith("model")
+                    and "=" in line
+                    and not line.startswith("model_")
+                ):
                     configured_model = line.split("=", 1)[1].strip().strip('"')
                 if line.startswith("model_reasoning_effort"):
                     extra["reasoning_effort"] = line.split("=", 1)[1].strip().strip('"')
@@ -324,9 +327,7 @@ def _get_gemini_usage() -> CLIUsageInfo:
     import shutil as sh
 
     if not sh.which("gemini"):
-        return CLIUsageInfo(
-            name="gemini", installed=False, auth_status="not installed"
-        )
+        return CLIUsageInfo(name="gemini", installed=False, auth_status="not installed")
 
     configured_model = DEFAULT_MODELS.get("gemini", "")
     extra: Dict[str, Any] = {}

@@ -14,9 +14,10 @@ from app.domain.entities import (
     Message as MessageEntity,
     Project as ProjectEntity,
     Session as SessionEntity,
+    Task as TaskEntity,
 )
-from app.domain.value_objects import MessageRole, SessionStatus, SessionType
-from app.infrastructure.database.models import Message, Project, Session
+from app.domain.value_objects import MessageRole, SessionStatus, SessionType, TaskStatus
+from app.infrastructure.database.models import Message, Project, Session, Task
 
 
 class SessionMapper:
@@ -39,6 +40,7 @@ class SessionMapper:
             project_id=model.project_id,
             session_type=SessionType(model.session_type),
             status=SessionStatus(model.status),
+            task_id=model.task_id,
             cli_backend=getattr(model, "cli_backend", "claude") or "claude",
             claude_session_id=model.claude_session_id,
             context=model.context or {},
@@ -64,6 +66,7 @@ class SessionMapper:
 
         model.agent_id = entity.agent_id
         model.project_id = entity.project_id
+        model.task_id = entity.task_id
         model.session_type = entity.session_type.value
         model.status = entity.status.value
         model.cli_backend = entity.cli_backend
@@ -185,6 +188,36 @@ class MessageMapper:
         model.agent_name = entity.agent_name
         model.from_instance_id = entity.from_instance_id
         model.response_id = entity.response_id
+
+        return model
+
+
+class TaskMapper:
+    """Maps between Task entity and Task model."""
+
+    @staticmethod
+    def to_entity(model: Task) -> TaskEntity:
+        return TaskEntity(
+            id=model.id,
+            project_id=model.project_id,
+            name=model.name,
+            description=model.description,
+            status=TaskStatus(model.status),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    @staticmethod
+    def to_model(entity: TaskEntity, model: Optional[Task] = None) -> Task:
+        if model is None:
+            model = Task(id=entity.id)
+
+        model.project_id = entity.project_id
+        model.name = entity.name
+        model.description = entity.description
+        model.status = entity.status.value
+        model.created_at = entity.created_at
+        model.updated_at = entity.updated_at
 
         return model
 

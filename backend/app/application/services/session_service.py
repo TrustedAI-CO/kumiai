@@ -86,6 +86,7 @@ class SessionService:
             id=uuid4(),
             agent_id=request.agent_id,
             project_id=request.project_id,
+            task_id=getattr(request, "task_id", None),
             session_type=session_type,
             status=SessionStatus.INITIALIZING,
             cli_backend=cli_backend,

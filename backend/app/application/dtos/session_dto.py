@@ -13,6 +13,7 @@ class SessionDTO(TimestampedDTO):
     id: UUID
     agent_id: str
     project_id: Optional[UUID]
+    task_id: Optional[UUID] = None
     session_type: str
     status: str
     cli_backend: str = "claude"
@@ -41,6 +42,7 @@ class SessionDTO(TimestampedDTO):
             id=entity.id,
             agent_id=entity.agent_id,
             project_id=entity.project_id,
+            task_id=entity.task_id,
             session_type=entity.session_type.value,
             status=entity.status.value,
             cli_backend=entity.cli_backend,

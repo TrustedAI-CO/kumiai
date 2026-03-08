@@ -19,6 +19,9 @@ class CreateSessionRequest(BaseModel):
     project_id: Optional[UUID] = Field(
         None, description="UUID of the project (required for PM sessions)"
     )
+    task_id: Optional[UUID] = Field(
+        None, description="Optional task UUID to group sessions"
+    )
     session_type: str = Field(
         ...,
         description="Type of session: pm, specialist, assistant, agent_assistant, skill_assistant",
