@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, FolderOpen, Trash2, ChevronLeft, ChevronRight, Pencil, Folder, Briefcase, LayoutGrid, Table2, ListTodo } from 'lucide-react';
+import { Plus, Search, FolderOpen, Trash2, ChevronLeft, ChevronRight, Folder, Briefcase } from 'lucide-react';
 import { LoadingState, EmptyState } from '@/components/ui';
 import { api, type Agent, type AgentInstance, type Project, type SkillMetadata } from '@/lib/api';
-import { KanbanCard } from '@/components/features/kanban';
 import { UnifiedChatSessionModal } from '@/components/features/sessions';
 import { PMChat } from '@/components/features/chat';
-import { ProjectCard, ProjectsList } from '@/components/features/projects';
+import { ProjectCard, ProjectsList, ProjectHeaderActions } from '@/components/features/projects';
 import { Avatar } from '@/ui';
 import { Input } from '@/components/ui/primitives/input';
 import { Textarea } from '@/components/ui/primitives/textarea';
@@ -22,7 +21,6 @@ import { FileViewerModal } from '@/components/features/files';
 import { SessionListMobile, SessionsTable } from '@/components/features/sessions';
 import { MobileHeader } from '@/components/layout';
 import { AgentSelectorPanel } from '@/components/features/agents';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/primitives/toggle-group';
 import { cn, layout } from '@/styles/design-system';
 import { getSkillIcon } from '@/constants/skillIcons';
 import type { ChatContext } from '@/types/chat';
@@ -43,46 +41,33 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useIsMobile } from '@/hooks';
-import { useTasks } from '@/hooks/queries/useTasks';
-import { TaskListPanel } from '@/components/features/tasks';
-import type { TaskStatus } from '@/types/task';
+import { useTasks, useUpdateTask, useDeleteTask } from '@/hooks/queries/useTasks';
+import { TaskKanbanCard, TaskCreateModal } from '@/components/features/tasks';
+import type { Task, TaskStatus } from '@/types/task';
 
-// Workflow stage column configuration
-const COLUMNS = [
-  { id: 'backlog', label: 'Backlog', color: 'bg-gray-50' },
-  { id: 'active', label: 'Active', color: 'bg-orange-100 dark:bg-orange-900/30' },
-  { id: 'waiting', label: 'Waiting', color: 'bg-gray-100' },
-  { id: 'done', label: 'Done', color: 'bg-green-100 dark:bg-green-900/30' },
+// Task status column configuration
+const TASK_COLUMNS = [
+  { id: 'open', label: 'Open', color: 'bg-gray-50' },
+  { id: 'in_progress', label: 'In Progress', color: 'bg-blue-50' },
+  { id: 'done', label: 'Done', color: 'bg-green-50' },
+  { id: 'archived', label: 'Archived', color: 'bg-slate-50' },
 ] as const;
 
-type ColumnId = typeof COLUMNS[number]['id'];
+type TaskColumnId = typeof TASK_COLUMNS[number]['id'];
 
-// Draggable card wrapper
-function DraggableCard({
-  agent,
-  agentDefinitions,
+// Draggable wrapper for task cards
+function DraggableTaskCard({
+  task,
+  sessionCount,
   onClick,
   onDelete,
-  fileBasedAgents,
-  taskName,
-  taskStatus,
 }: {
-  agent: AgentInstance;
-  agentDefinitions: Agent[];
+  task: Task;
+  sessionCount: number;
   onClick: () => void;
-  onDelete?: (agentId: string) => void;
-  fileBasedAgents?: Agent[];
-  taskName?: string;
-  taskStatus?: TaskStatus;
+  onDelete?: (taskId: string) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: agent.instance_id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -91,16 +76,12 @@ function DraggableCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <KanbanCard
-        agent={agent}
-        agentDefinitions={agentDefinitions}
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <TaskKanbanCard
+        task={task}
+        sessionCount={sessionCount}
         onClick={onClick}
         onDelete={onDelete}
-        dragListeners={listeners}
-        fileBasedAgents={fileBasedAgents}
-        taskName={taskName}
-        taskStatus={taskStatus}
       />
     </div>
   );
@@ -117,12 +98,14 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentInstances, setAgentInstances] = useState<AgentInstance[]>([]);
-  const [fileBasedAgents, setFileBasedAgents] = useState<Agent[]>([]);  // File-based agents for looking up colors
+  const [fileBasedAgents, setFileBasedAgents] = useState<Agent[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentInstance | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showSpawnDialog, setShowSpawnDialog] = useState(false);
-  const [spawnDialogInitialStage, setSpawnDialogInitialStage] = useState<string>('backlog');
+  const [spawnDialogInitialTaskId, setSpawnDialogInitialTaskId] = useState<string | undefined>(undefined);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -132,9 +115,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [projectsReloadTrigger, setProjectsReloadTrigger] = useState(0);
-
-  // Task panel state
-  const [showTaskPanel, setShowTaskPanel] = useState(false);
 
   // Get session ID from URL
   const sessionIdFromUrl = searchParams.get('session');
@@ -150,19 +130,26 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   const isPMExpanded = useWorkspaceStore((state) => state.isPMExpanded);
   const setPMExpanded = useWorkspaceStore((state) => state.setPMExpanded);
 
+  // Tasks for the current project
+  const { data: projectTasks = [] } = useTasks(selectedProject?.id);
+  const updateTask = useUpdateTask(selectedProject?.id || '');
+  const deleteTask = useDeleteTask(selectedProject?.id || '');
+
   // Handle Esc key to close session
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && viewMode === 'chat' && selectedAgent) {
         setSelectedAgent(null);
-        setViewMode('kanban');
+        setViewMode(selectedTaskId ? 'task-sessions' : 'kanban');
         updateSessionInUrl(null);
+      } else if (event.key === 'Escape' && viewMode === 'task-sessions') {
+        closeTask();
       }
     };
 
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
-  }, [viewMode, selectedAgent]);
+  }, [viewMode, selectedAgent, selectedTaskId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -181,10 +168,8 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
       console.error('[FRONTEND] Failed to load agents:', error);
     });
 
-    // Load projects from API
     api.getProjects().then(fetchedProjects => {
       setProjects(fetchedProjects);
-      // Auto-select based on currentProjectId or first project
       if (fetchedProjects.length > 0) {
         const projectToSelect = currentProjectId
           ? fetchedProjects.find(p => p.id === currentProjectId) || fetchedProjects[0]
@@ -198,15 +183,13 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     });
   }, []);
 
-  // Load sessions when currentProjectId changes (on mount and when switching projects)
+  // Load sessions when currentProjectId changes
   useEffect(() => {
-    // Load sessions - filter by current project to avoid mixing PM sessions
     const loadSessions = currentProjectId
       ? api.getSessions(currentProjectId)
       : api.getSessions();
 
     loadSessions.then(sessions => {
-      // Defensive: ensure sessions is an array
       const sessionsArray = Array.isArray(sessions) ? sessions : [];
       if (!Array.isArray(sessions)) {
         console.warn('[FRONTEND] getSessions returned non-array:', sessions);
@@ -215,59 +198,33 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
       setSessionsLoading(false);
     }).catch(error => {
       console.error('[FRONTEND] Failed to load sessions:', error);
-      setAgentInstances([]); // Set empty array on error
+      setAgentInstances([]);
       setSessionsLoading(false);
     });
 
-    // Poll for task updates - filter by current project to avoid mixing PM sessions
-    // Uses Page Visibility API to pause polling when tab is backgrounded
     let interval: NodeJS.Timeout | null = null;
 
     const startPolling = () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-
+      if (interval) clearInterval(interval);
       interval = setInterval(() => {
-        if (currentProjectId) {
-          api.getSessions(currentProjectId).then(sessions => {
-            setAgentInstances(sessions);
-          }).catch(error => {
-            console.error('[WorkplaceKanban] Failed to poll sessions:', error);
-          });
-        } else {
-          api.getSessions().then(sessions => {
-            setAgentInstances(sessions);
-          }).catch(error => {
-            console.error('[WorkplaceKanban] Failed to poll sessions:', error);
-          });
-        }
+        const req = currentProjectId ? api.getSessions(currentProjectId) : api.getSessions();
+        req.then(sessions => {
+          setAgentInstances(sessions);
+        }).catch(error => {
+          console.error('[WorkplaceKanban] Failed to poll sessions:', error);
+        });
       }, 10000);
     };
 
     const stopPolling = () => {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
-      }
+      if (interval) { clearInterval(interval); interval = null; }
     };
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Page is hidden/backgrounded - stop polling
-        stopPolling();
-      } else {
-        // Page is visible - resume polling
-        startPolling();
-      }
+      if (document.hidden) stopPolling(); else startPolling();
     };
 
-    // Start polling if page is visible
-    if (!document.hidden) {
-      startPolling();
-    }
-
-    // Listen for visibility changes
+    if (!document.hidden) startPolling();
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
@@ -282,8 +239,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
       const project = projects.find(p => p.id === currentProjectId);
       if (project && project.id !== selectedProject?.id) {
         setSelectedProject(project);
-        // Note: Session remains open when switching projects to allow
-        // continued streaming/interaction with sessions from other projects
       }
     }
   }, [currentProjectId, projects]);
@@ -293,7 +248,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     if (selectedAgent) {
       const updatedAgent = agentInstances.find(a => a.instance_id === selectedAgent.instance_id);
       if (updatedAgent) {
-        // Update agent data (allow cross-project sessions to remain open)
         setSelectedAgent(updatedAgent);
       }
     }
@@ -303,12 +257,10 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   useEffect(() => {
     if (sessionIdFromUrl && agentInstances.length > 0 && !selectedAgent) {
       const sessionToRestore = agentInstances.find(a => a.instance_id === sessionIdFromUrl);
-      // Only restore if the session belongs to the currently selected project
       if (sessionToRestore && (!selectedProject || sessionToRestore.project_id === selectedProject.id)) {
         setSelectedAgent(sessionToRestore);
         setViewMode('chat');
       } else if (sessionToRestore && selectedProject && sessionToRestore.project_id !== selectedProject.id) {
-        // Session is from a different project, clear it from URL
         updateSessionInUrl(null);
       }
     }
@@ -330,19 +282,14 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
 
   // Detect PM session and set chat context
   useEffect(() => {
-    if (!onChatContextChange || !selectedProject) {
-      return;
-    }
+    if (!onChatContextChange || !selectedProject) return;
 
-    // Find PM session for the selected project
-    // IMPORTANT: Double-check project_id to prevent mixing PM sessions between projects
     const pmSession = agentInstances.find(agent =>
       agent.role === 'pm' &&
       agent.project_id === selectedProject.id
     );
 
     if (pmSession) {
-      // Extra safety check: Ensure PM session belongs to current project
       if (pmSession.project_id !== selectedProject.id) {
         console.warn('[WorkplaceKanban] PM session project_id mismatch:', {
           pmSessionProjectId: pmSession.project_id,
@@ -350,8 +297,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
         });
         return;
       }
-
-      // PM exists for this project - set context
       onChatContextChange({
         role: 'pm',
         name: `PM for ${selectedProject.name}`,
@@ -363,68 +308,73 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
         },
       });
     } else {
-      // No PM session found - should have been auto-created when project was created
-      // Clear context
-      onChatContextChange({
-        role: null,
-      });
+      onChatContextChange({ role: null });
     }
   }, [agentInstances, selectedProject, onChatContextChange]);
 
   // Filter agent instances by selected project (exclude PM sessions)
-  // Defensive: ensure agentInstances is always an array before filtering
   const projectAgents = selectedProject
     ? (Array.isArray(agentInstances) ? agentInstances : []).filter(agent =>
         agent.project_id === selectedProject.id &&
-        agent.role !== 'pm'  // Filter out PM sessions - they appear in sidebar
+        agent.role !== 'pm'
       )
     : [];
 
-  // Group agent instances by kanban stage (default to 'backlog' if not set)
-  // Defensive: ensure agentInstances is array
-  const safeAgents = Array.isArray(agentInstances) ? agentInstances : [];
-  const agentsByStage = COLUMNS.reduce((acc, col) => {
-    acc[col.id] = projectAgents.filter(a => (a.kanban_stage || 'backlog') === col.id);
-    return acc;
-  }, {} as Record<ColumnId, AgentInstance[]>);
-
-  // Tasks for the current project
-  const { data: projectTasks = [] } = useTasks(selectedProject?.id);
-  const taskById = useMemo(
-    () => Object.fromEntries(projectTasks.map(t => [t.id, t])),
+  // Group tasks by status
+  const tasksByStatus = useMemo(() =>
+    TASK_COLUMNS.reduce((acc, col) => {
+      acc[col.id] = projectTasks.filter(t => t.status === col.id);
+      return acc;
+    }, {} as Record<TaskColumnId, Task[]>),
     [projectTasks]
   );
+
+  // Count sessions per task
+  const sessionCountByTaskId = useMemo(() =>
+    projectAgents.reduce((acc, session) => {
+      if (session.task_id) {
+        acc[session.task_id] = (acc[session.task_id] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>),
+    [projectAgents]
+  );
+
+  // Sessions not assigned to any task
+  const unassignedSessions = useMemo(
+    () => projectAgents.filter(s => !s.task_id),
+    [projectAgents]
+  );
+
+  // Selected task
+  const selectedTask = selectedTaskId
+    ? projectTasks.find(t => t.id === selectedTaskId) ?? null
+    : null;
+
+  // Sessions for the selected task
+  const selectedTaskSessions = selectedTask
+    ? projectAgents.filter(a => a.task_id === selectedTask.id)
+    : [];
+
+  // Active task being dragged
+  const activeTask = activeId ? projectTasks.find(t => t.id === activeId) : null;
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
 
     if (!over) return;
 
-    // Check if dropped on a column
-    const overId = over.id as string;
-    const targetColumn = COLUMNS.find(col => col.id === overId);
-
+    const targetColumn = TASK_COLUMNS.find(col => col.id === over.id);
     if (targetColumn && active.id !== targetColumn.id) {
-      try {
-        // Optimistically update UI
-        setAgentInstances(prev => prev.map(a =>
-          a.instance_id === active.id
-            ? { ...a, kanban_stage: targetColumn.id as ColumnId }
-            : a
-        ));
-
-        // Call backend to persist the change
-        await api.updateSessionStage(active.id as string, targetColumn.id);
-      } catch (error) {
-        console.error('Failed to update session stage:', error);
-        // Revert on error
-        api.getSessions().then(setAgentInstances);
-      }
+      updateTask.mutate({
+        taskId: active.id as string,
+        req: { status: targetColumn.id as TaskColumnId },
+      });
     }
   };
 
@@ -432,21 +382,17 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     setActiveId(null);
   };
 
-  const handleDelete = async (agentId: string) => {
-    if (!confirm('Are you sure you want to delete this session?')) {
-      return;
-    }
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to delete this session?')) return;
 
     try {
-      await api.deleteSession(agentId);
-      // Remove from local state
-      setAgentInstances(prev => prev.filter(a => a.instance_id !== agentId));
-      // Close modal if this agent is selected
-      if (selectedAgent?.instance_id === agentId) {
+      await api.deleteSession(sessionId);
+      setAgentInstances(prev => prev.filter(a => a.instance_id !== sessionId));
+      if (selectedAgent?.instance_id === sessionId) {
         setSelectedAgent(null);
       }
     } catch (error) {
-      console.error('Failed to delete agent:', error);
+      console.error('Failed to delete session:', error);
       alert('Failed to delete session. Please try again.');
     }
   };
@@ -457,21 +403,14 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     }
 
     try {
-      // First, delete all sessions for this project
       const projectSessions = agentInstances.filter(a => a.project_id === projectId);
       await Promise.all(
         projectSessions.map(session => api.deleteSession(session.instance_id))
       );
-
-      // Then delete the project itself
       await api.deleteProject(projectId);
-
-      // Update local state
       setAgentInstances(prev => prev.filter(a => a.project_id !== projectId));
       setProjects(prev => prev.filter(p => p.id !== projectId));
-      setProjectsReloadTrigger(prev => prev + 1); // Trigger reload
-
-      // Clear selection if this project was selected
+      setProjectsReloadTrigger(prev => prev + 1);
       if (selectedProject?.id === projectId) {
         setSelectedProject(projects.find(p => p.id !== projectId) || null);
       }
@@ -481,9 +420,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     }
   };
 
-  const activeAgent = activeId ? agentInstances.find(a => a.instance_id === activeId) : null;
-
-  // Filter projects by search query
   const filteredProjects = projects.filter(project => {
     if (!projectSearchQuery) return true;
     const query = projectSearchQuery.toLowerCase();
@@ -493,19 +429,29 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     );
   });
 
-  // Common handler for selecting/opening projects
   const handleProjectSelection = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     if (project) {
       setSelectedProject(project);
       setSelectedAgent(null);
+      setSelectedTaskId(null);
       setViewMode('kanban');
-      setPMExpanded(false); // FIX: Reset PM expansion when switching projects
+      setPMExpanded(false);
       updateSessionInUrl(null);
       if (onProjectChange) {
         onProjectChange(project.id);
       }
     }
+  };
+
+  const openTask = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setViewMode('task-sessions');
+  };
+
+  const closeTask = () => {
+    setSelectedTaskId(null);
+    setViewMode('kanban');
   };
 
   return (
@@ -536,7 +482,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
             projectPath={selectedProject.path}
             projectName={selectedProject.name}
             onSessionJump={(sessionId) => {
-              // Find the session in agentInstances list
               const targetAgent = agentInstances.find(a => a.instance_id === sessionId);
               if (targetAgent) {
                 setSelectedAgent(targetAgent);
@@ -556,7 +501,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
       {({ leftSidebarOpen, rightSidebarOpen, toggleLeftSidebar, toggleRightSidebar }) => (
         <>
           <div className="flex-1 flex overflow-hidden bg-white relative">
-            {/* When PM is expanded, it takes over the entire center+right area */}
             {isPMExpanded && selectedProject ? (
               <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 <PMChat
@@ -582,24 +526,39 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
               </div>
             ) : (
               <>
-                {/* Center: Kanban Board or Chat Session */}
                 <div className="flex-1 flex flex-col bg-white overflow-hidden max-w-full">
                   {viewMode === 'chat' && selectedAgent ? (
-                    // Show chat session inline
                     <>
                       <MainHeader
-                        breadcrumb={selectedProject?.name || "Project"}
-                        title={selectedAgent.current_session_description || selectedAgent.context?.description || selectedAgent.context?.task_description || selectedAgent.session_id || "New Session"}
+                        breadcrumbs={
+                          selectedTask
+                            ? [
+                                { label: selectedProject?.name || 'Project', onClick: () => { setSelectedAgent(null); closeTask(); updateSessionInUrl(null); } },
+                                { label: selectedTask.name, onClick: () => { setSelectedAgent(null); setViewMode('task-sessions'); updateSessionInUrl(null); } },
+                              ]
+                            : [
+                                { label: selectedProject?.name || 'Project', onClick: () => { setSelectedAgent(null); setViewMode('kanban'); updateSessionInUrl(null); } },
+                              ]
+                        }
+                        title={selectedAgent.current_session_description || selectedAgent.context?.description || selectedAgent.context?.task_description || selectedAgent.session_id || 'New Session'}
                         showBackButton={true}
                         onBack={() => {
                           setSelectedAgent(null);
-                          setViewMode('kanban');
+                          setViewMode(selectedTaskId ? 'task-sessions' : 'kanban');
                           updateSessionInUrl(null);
                         }}
                         leftSidebarOpen={leftSidebarOpen}
                         onToggleLeftSidebar={toggleLeftSidebar}
                         rightSidebarOpen={rightSidebarOpen}
                         onToggleRightSidebar={toggleRightSidebar}
+                        actions={
+                          <ProjectHeaderActions
+                            viewMode="chat"
+                            boardViewMode={boardViewMode}
+                            onBoardViewModeChange={(v) => setBoardViewMode(v)}
+                            onEditProject={() => selectedProject && setEditingProject(selectedProject)}
+                          />
+                        }
                       />
                       <div className="flex-1 overflow-hidden">
                         <UnifiedChatSessionModal
@@ -607,11 +566,10 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                           agents={agents}
                           onClose={() => {
                             setSelectedAgent(null);
-                            setViewMode('kanban');
+                            setViewMode(selectedTaskId ? 'task-sessions' : 'kanban');
                             updateSessionInUrl(null);
                           }}
                           onSessionJump={(sessionId) => {
-                            // Find the session in agentInstances list
                             const targetAgent = agentInstances.find(a => a.instance_id === sessionId);
                             if (targetAgent) {
                               setSelectedAgent(targetAgent);
@@ -622,8 +580,45 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                         />
                       </div>
                     </>
+                  ) : viewMode === 'task-sessions' && selectedTask ? (
+                    <>
+                      <MainHeader
+                        breadcrumb={selectedProject?.name || 'Project'}
+                        breadcrumbOnClick={closeTask}
+                        title={selectedTask.name}
+                        showBackButton={true}
+                        onBack={closeTask}
+                        leftSidebarOpen={leftSidebarOpen}
+                        onToggleLeftSidebar={toggleLeftSidebar}
+                        rightSidebarOpen={rightSidebarOpen}
+                        onToggleRightSidebar={toggleRightSidebar}
+                        actions={
+                          <ProjectHeaderActions
+                            viewMode="task-sessions"
+                            boardViewMode={boardViewMode}
+                            onBoardViewModeChange={(v) => setBoardViewMode(v)}
+                            onEditProject={() => selectedProject && setEditingProject(selectedProject)}
+                            onNewSession={() => {
+                              setSpawnDialogInitialTaskId(selectedTask.id);
+                              setShowSpawnDialog(true);
+                            }}
+                          />
+                        }
+                      />
+                      <div className="flex-1 overflow-hidden px-6 py-4">
+                        <SessionsTable
+                          sessions={selectedTaskSessions}
+                          agents={agents}
+                          fileBasedAgents={fileBasedAgents}
+                          onSessionSelect={(agent) => {
+                            setSelectedAgent(agent);
+                            setViewMode('chat');
+                            updateSessionInUrl(agent.instance_id);
+                          }}
+                        />
+                      </div>
+                    </>
                   ) : projectsLoading && currentProjectId ? (
-                    // Loading project
                     <LoadingState message="Loading project..." />
                   ) : selectedProject && viewMode === 'kanban' ? (
                     <>
@@ -634,97 +629,37 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                         rightSidebarOpen={rightSidebarOpen}
                         onToggleRightSidebar={toggleRightSidebar}
                         actions={
-                          <div className="hidden lg:flex items-center gap-3">
-                            {/* Edit Project Button */}
-                            <button
-                              onClick={() => setEditingProject(selectedProject)}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white hover:bg-gray-50 transition-colors text-gray-700 text-sm font-medium border border-gray-300"
-                              title="Edit project"
-                            >
-                              <Pencil className="w-4 h-4" />
-                              <span>Edit Project</span>
-                            </button>
-
-                            {/* Tasks Toggle */}
-                            <button
-                              onClick={() => setShowTaskPanel(!showTaskPanel)}
-                              className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border",
-                                showTaskPanel
-                                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                                  : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
-                              )}
-                              title="Toggle tasks panel"
-                            >
-                              <ListTodo className="w-4 h-4" />
-                              <span>Tasks</span>
-                            </button>
-
-                            {/* New Session Button */}
-                            <button
-                              onClick={() => {
-                                setSpawnDialogInitialStage('backlog');
-                                setShowSpawnDialog(true);
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black hover:bg-gray-800 transition-colors text-white text-sm font-medium"
-                              title="Create new session"
-                            >
-                              <Plus className="w-4 h-4" />
-                              <span>New Session</span>
-                            </button>
-
-                            {/* View Toggle */}
-                            <ToggleGroup
-                              type="single"
-                              value={boardViewMode}
-                              onValueChange={(value) => {
-                                if (value) setBoardViewMode(value as 'kanban' | 'table');
-                              }}
-                              className="border rounded-lg bg-white"
-                            >
-                              <ToggleGroupItem value="kanban" aria-label="Kanban view" className="gap-2">
-                                <LayoutGrid className="h-4 w-4" />
-                                <span className="text-sm">Board</span>
-                              </ToggleGroupItem>
-                              <ToggleGroupItem value="table" aria-label="Table view" className="gap-2">
-                                <Table2 className="h-4 w-4" />
-                                <span className="text-sm">Table</span>
-                              </ToggleGroupItem>
-                            </ToggleGroup>
-                          </div>
+                          <ProjectHeaderActions
+                            viewMode="kanban"
+                            boardViewMode={boardViewMode}
+                            onBoardViewModeChange={(v) => setBoardViewMode(v)}
+                            onEditProject={() => setEditingProject(selectedProject)}
+                            onNewTask={() => setShowCreateTaskModal(true)}
+                          />
                         }
                       />
 
-                      {/* Task Panel (desktop only) */}
-                      {showTaskPanel && selectedProject && (
-                        <div className="hidden lg:block">
-                          <TaskListPanel projectId={selectedProject.id} />
-                        </div>
-                      )}
-
-                      {/* Mobile: Session List View */}
-                      <div className="flex-1 lg:hidden overflow-hidden">
-                        <SessionListMobile
-                          sessions={projectAgents}
-                          agents={agents}
-                          selectedSessionId={selectedAgent?.instance_id}
-                          onSessionSelect={(agent) => {
-                            setSelectedAgent(agent);
-                            setViewMode('chat');
-                            updateSessionInUrl(agent.instance_id);
-                          }}
-                          onSessionDelete={handleDelete}
-                          onSessionCreate={() => {
-                            setSpawnDialogInitialStage('backlog');
-                            setShowSpawnDialog(true);
-                          }}
-                          loading={sessionsLoading}
-                          fileBasedAgents={fileBasedAgents}
-                        />
+                      {/* Mobile: Task list */}
+                      <div className="flex-1 lg:hidden overflow-y-auto px-4 py-4 space-y-2">
+                        {projectTasks.length === 0 ? (
+                          <div className="text-center py-12 text-sm text-gray-400">
+                            No tasks yet. Tap "New Task" to create one.
+                          </div>
+                        ) : (
+                          projectTasks.map((task) => (
+                            <TaskKanbanCard
+                              key={task.id}
+                              task={task}
+                              sessionCount={sessionCountByTaskId[task.id] || 0}
+                              onClick={() => openTask(task.id)}
+                              onDelete={(taskId) => deleteTask.mutate(taskId)}
+                            />
+                          ))
+                        )}
                       </div>
 
                       {/* Desktop: Kanban Board or Table View */}
-                      <div className="hidden lg:block flex-1 overflow-hidden">
+                      <div className="hidden lg:flex lg:flex-col flex-1 overflow-hidden">
                         {boardViewMode === 'kanban' ? (
                           <div className="h-full overflow-x-auto overflow-y-hidden pl-6 pt-2 pb-6">
                             <DndContext
@@ -735,33 +670,26 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                               onDragCancel={handleDragCancel}
                             >
                               <div className="flex gap-4 h-full w-full pr-6">
-                                {COLUMNS.map((column, index) => (
-                                  <KanbanColumn
+                                {TASK_COLUMNS.map((column, index) => (
+                                  <TaskKanbanColumn
                                     key={column.id}
                                     column={column}
-                                    agents={agentsByStage[column.id]}
-                                    agentDefinitions={agents}
-                                    onCardClick={(agent) => {
-                                      setSelectedAgent(agent);
-                                      setViewMode('chat');
-                                      updateSessionInUrl(agent.instance_id);
-                                    }}
-                                    onDeleteCard={handleDelete}
-                                    isLast={index === COLUMNS.length - 1}
-                                    fileBasedAgents={fileBasedAgents}
-                                    taskById={taskById}
+                                    tasks={tasksByStatus[column.id]}
+                                    sessionCountByTaskId={sessionCountByTaskId}
+                                    onTaskClick={(taskId) => openTask(taskId)}
+                                    onTaskDelete={(taskId) => deleteTask.mutate(taskId)}
+                                    isLast={index === TASK_COLUMNS.length - 1}
                                   />
                                 ))}
                               </div>
 
                               <DragOverlay>
-                                {activeAgent ? (
+                                {activeTask ? (
                                   <div className="opacity-80">
-                                    <KanbanCard
-                                      agent={activeAgent}
-                                      agentDefinitions={agents}
+                                    <TaskKanbanCard
+                                      task={activeTask}
+                                      sessionCount={sessionCountByTaskId[activeTask.id] || 0}
                                       onClick={() => {}}
-                                      fileBasedAgents={fileBasedAgents}
                                     />
                                   </div>
                                 ) : null}
@@ -769,26 +697,34 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                             </DndContext>
                           </div>
                         ) : (
-                          <div className="h-full overflow-hidden pl-6 pr-6 pt-2 pb-6">
-                            <SessionsTable
-                              sessions={projectAgents}
-                              agents={agents}
-                              onSessionSelect={(agent) => {
-                                setSelectedAgent(agent);
-                                setViewMode('chat');
-                                updateSessionInUrl(agent.instance_id);
-                              }}
-                              fileBasedAgents={fileBasedAgents}
+                          <div className="h-full overflow-hidden pl-6 pr-6 pt-2 pb-6 flex flex-col gap-3">
+                            <TasksTable
+                              tasks={projectTasks}
+                              sessionCountByTaskId={sessionCountByTaskId}
+                              onTaskClick={(taskId) => openTask(taskId)}
+                              onTaskDelete={(taskId) => deleteTask.mutate(taskId)}
                             />
                           </div>
+                        )}
+
+                        {/* Unassigned Sessions section */}
+                        {unassignedSessions.length > 0 && (
+                          <UnassignedSessionsBar
+                            sessions={unassignedSessions}
+                            agents={agents}
+                            fileBasedAgents={fileBasedAgents}
+                            onSessionSelect={(agent) => {
+                              setSelectedAgent(agent);
+                              setViewMode('chat');
+                              updateSessionInUrl(agent.instance_id);
+                            }}
+                          />
                         )}
                       </div>
                     </>
                   ) : projectsLoading ? (
-                    // Loading initial projects
                     <LoadingState message="Loading..." />
                   ) : (
-                    // No project selected
                     <EmptyState
                       icon={FolderOpen}
                       title="No project selected"
@@ -801,26 +737,35 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
             )}
           </div>
 
-          {/* Modals - Positioned absolutely, outside flex layout */}
+          {/* Modals */}
           <AnimatePresence>
             {showSpawnDialog && (
               <SpawnDialog
                 selectedProject={selectedProject}
-                initialStage={spawnDialogInitialStage}
-                onClose={() => setShowSpawnDialog(false)}
+                initialTaskId={spawnDialogInitialTaskId}
+                onClose={() => {
+                  setShowSpawnDialog(false);
+                  setSpawnDialogInitialTaskId(undefined);
+                }}
                 onSpawn={(agent) => {
                   setAgentInstances([...agentInstances, agent]);
-                  // Auto-open if created in active stage
-                  if (agent.kanban_stage === 'active') {
-                    setSelectedAgent(agent);
-                    setViewMode('chat');
-                    updateSessionInUrl(agent.instance_id);
-                  }
+                  setSelectedAgent(agent);
+                  setViewMode('chat');
+                  updateSessionInUrl(agent.instance_id);
                   setShowSpawnDialog(false);
+                  setSpawnDialogInitialTaskId(undefined);
                 }}
               />
             )}
           </AnimatePresence>
+
+          {showCreateTaskModal && selectedProject && (
+            <TaskCreateModal
+              projectId={selectedProject.id}
+              isOpen={showCreateTaskModal}
+              onClose={() => setShowCreateTaskModal(false)}
+            />
+          )}
 
           {showCreateProjectDialog && (
             <ProjectModal
@@ -831,15 +776,13 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                   const project = await api.createProject(data as any);
                   setProjects([...projects, project]);
                   setSelectedProject(project);
-
-                  // Close any open session and show kanban/table view
                   setSelectedAgent(null);
+                  setSelectedTaskId(null);
                   setViewMode('kanban');
                   updateSessionInUrl(null);
                   setPMExpanded(false);
-
                   setShowCreateProjectDialog(false);
-                  setProjectsReloadTrigger(prev => prev + 1); // Trigger reload
+                  setProjectsReloadTrigger(prev => prev + 1);
                   if (onProjectChange) {
                     onProjectChange(project.id);
                   }
@@ -861,7 +804,7 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                   if (selectedProject?.id === updatedProject.id) {
                     setSelectedProject(updatedProject);
                   }
-                  setProjectsReloadTrigger(prev => prev + 1); // Trigger reload
+                  setProjectsReloadTrigger(prev => prev + 1);
                   setEditingProject(null);
                 } catch (error) {
                   alert('Failed to update project: ' + error);
@@ -870,7 +813,6 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
             />
           )}
 
-          {/* File Viewer Modal */}
           <FileViewerModal
             mode={selectedAgent ? 'session' : 'project'}
             projectId={selectedProject?.id}
@@ -884,25 +826,21 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   );
 }
 
-// Kanban Column Component
-function KanbanColumn({
+// Task Kanban Column Component
+function TaskKanbanColumn({
   column,
-  agents,
-  agentDefinitions,
-  onCardClick,
-  onDeleteCard,
+  tasks,
+  sessionCountByTaskId,
+  onTaskClick,
+  onTaskDelete,
   isLast,
-  fileBasedAgents,
-  taskById,
 }: {
-  column: typeof COLUMNS[number];
-  agents: AgentInstance[];
-  agentDefinitions: Agent[];
-  onCardClick: (agent: AgentInstance) => void;
-  onDeleteCard?: (agentId: string) => void;
+  column: typeof TASK_COLUMNS[number];
+  tasks: Task[];
+  sessionCountByTaskId: Record<string, number>;
+  onTaskClick: (taskId: string) => void;
+  onTaskDelete?: (taskId: string) => void;
   isLast?: boolean;
-  fileBasedAgents?: Agent[];
-  taskById?: Record<string, { name: string; status: TaskStatus }>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -910,132 +848,251 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col flex-1 min-w-[260px] bg-white rounded-lg border shadow-sm transition-all",
-        isOver ? "border-primary bg-muted/50" : "border-gray-200",
-        isLast && "mr-6"
+        'flex flex-col flex-1 min-w-[260px] bg-white rounded-lg border shadow-sm transition-all',
+        isOver ? 'border-primary bg-muted/50' : 'border-gray-200',
+        isLast && 'mr-6'
       )}
     >
-      {/* Column Header */}
       <div className={`p-2 rounded-t-lg border-b border-gray-200 ${column.color}`}>
         <div className="flex items-center justify-between">
           <h4 className="font-medium text-sm text-gray-700">{column.label}</h4>
           <span className="type-caption font-medium text-gray-600 bg-white px-2 py-0.5 rounded-full">
-            {agents.length}
+            {tasks.length}
           </span>
         </div>
       </div>
 
-      {/* Cards - Full height droppable area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-[200px]">
         <SortableContext
-          items={agents.map(a => a.instance_id)}
+          items={tasks.map(t => t.id)}
           strategy={verticalListSortingStrategy}
         >
-          {agents.length === 0 ? (
-            <div className="text-center text-gray-400 text-sm py-8">
-            </div>
-          ) : (
-            agents.map((agent) => {
-              const task = agent.task_id ? taskById?.[agent.task_id] : undefined;
-              return (
-                <DraggableCard
-                  key={agent.instance_id}
-                  agent={agent}
-                  agentDefinitions={agentDefinitions}
-                  onClick={() => onCardClick(agent)}
-                  onDelete={onDeleteCard}
-                  fileBasedAgents={fileBasedAgents}
-                  taskName={task?.name}
-                  taskStatus={task?.status}
-                />
-              );
-            })
-          )}
+          {tasks.map((task) => (
+            <DraggableTaskCard
+              key={task.id}
+              task={task}
+              sessionCount={sessionCountByTaskId[task.id] || 0}
+              onClick={() => onTaskClick(task.id)}
+              onDelete={onTaskDelete}
+            />
+          ))}
         </SortableContext>
       </div>
     </div>
   );
 }
 
-// Spawn Dialog - full implementation from original Workplace
+const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
+  open: 'bg-gray-100 text-gray-600',
+  in_progress: 'bg-blue-100 text-blue-700',
+  done: 'bg-green-100 text-green-700',
+  archived: 'bg-slate-100 text-slate-500',
+};
+
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  done: 'Done',
+  archived: 'Archived',
+};
+
+// Simple tasks table for table view mode
+function TasksTable({
+  tasks,
+  sessionCountByTaskId,
+  onTaskClick,
+  onTaskDelete,
+}: {
+  tasks: Task[];
+  sessionCountByTaskId: Record<string, number>;
+  onTaskClick: (taskId: string) => void;
+  onTaskDelete?: (taskId: string) => void;
+}) {
+  const STATUS_COLORS = TASK_STATUS_COLORS;
+  const STATUS_LABELS = TASK_STATUS_LABELS;
+
+  if (tasks.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
+        No tasks yet. Create one to get started.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto rounded-lg border border-gray-200">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 bg-gray-50">
+            <th className="text-left px-4 py-2.5 font-medium text-gray-600">Task</th>
+            <th className="text-left px-4 py-2.5 font-medium text-gray-600">Status</th>
+            <th className="text-left px-4 py-2.5 font-medium text-gray-600">Sessions</th>
+            <th className="w-10" />
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr
+              key={task.id}
+              className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer group"
+              onClick={() => onTaskClick(task.id)}
+            >
+              <td className="px-4 py-3">
+                <p className="font-medium text-gray-900">{task.name}</p>
+                {task.description && (
+                  <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{task.description}</p>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_COLORS[task.status])}>
+                  {STATUS_LABELS[task.status]}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-gray-500">
+                {sessionCountByTaskId[task.id] || 0}
+              </td>
+              <td className="px-2 py-3">
+                {onTaskDelete && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete task "${task.name}"?`)) onTaskDelete(task.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Collapsible bar showing sessions not assigned to any task
+function UnassignedSessionsBar({
+  sessions,
+  agents,
+  fileBasedAgents,
+  onSessionSelect,
+}: {
+  sessions: AgentInstance[];
+  agents: Agent[];
+  fileBasedAgents?: Agent[];
+  onSessionSelect: (session: AgentInstance) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-t border-gray-200 bg-gray-50">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-6 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+      >
+        <ChevronRight className={cn('w-4 h-4 transition-transform', expanded && 'rotate-90')} />
+        <span className="font-medium">Unassigned Sessions</span>
+        <span className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full ml-1">
+          {sessions.length}
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-6 pb-3 grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+          {sessions.map((session) => {
+            const fileAgent = fileBasedAgents?.find(a => a.id === session.agent_id);
+            return (
+              <button
+                key={session.instance_id}
+                type="button"
+                onClick={() => onSessionSelect(session)}
+                className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left"
+              >
+                <Avatar
+                  seed={session.agent_id || 'unknown'}
+                  size={20}
+                  className="w-5 h-5 flex-shrink-0"
+                  color={fileAgent?.icon_color || '#6B7280'}
+                />
+                <span className="text-xs text-gray-700 truncate">
+                  {session.current_session_description || session.context?.description || 'No description'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Spawn Dialog
 function SpawnDialog({
   selectedProject,
-  initialStage = 'backlog',
+  initialTaskId,
   onClose,
   onSpawn,
 }: {
   selectedProject: Project | null;
-  initialStage?: string;
+  initialTaskId?: string;
   onClose: () => void;
   onSpawn: (agent: AgentInstance) => void;
 }) {
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('');  // Changed to single agent selection
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [sessionDescription, setSessionDescription] = useState('');
-  const [kanbanStage, setKanbanStage] = useState(initialStage);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [selectedTaskId, setSelectedTaskId] = useState<string>(initialTaskId || '');
   const [spawning, setSpawning] = useState(false);
-  const [agents, setAgents] = useState<Agent[]>([]);  // Load agents from file system
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [skills, setSkills] = useState<SkillMetadata[]>([]);
   const isMobile = useIsMobile();
 
   const { data: availableTasks = [] } = useTasks(selectedProject?.id);
   const activeTaskChoices = availableTasks.filter(t => t.status === 'open' || t.status === 'in_progress');
 
-  // Load agents and skills on mount
   useEffect(() => {
     api.getAgents().then(setAgents).catch(console.error);
     api.getSkills().then(setSkills).catch(console.error);
   }, []);
 
-  // Handle Esc key to close modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Filter agents to only show those belonging to the current project
   const projectAgents = useMemo(() => {
     if (!selectedProject) return agents;
-
     const allowedAgentIds = new Set([
       ...(selectedProject.team_member_ids || []),
       ...(selectedProject.pm_agent_id ? [selectedProject.pm_agent_id] : []),
     ]);
-
     return agents.filter(agent => allowedAgentIds.has(agent.id));
   }, [agents, selectedProject]);
 
   const handleToggleAgent = (agentId: string) => {
-    // Single selection - just set the selected agent
     setSelectedAgentId(agentId === selectedAgentId ? '' : agentId);
   };
 
   const handleSpawn = async () => {
     if (!selectedAgentId || !sessionDescription) return;
 
-    console.log('[FRONTEND] Creating session with agent:', selectedAgentId);
     setSpawning(true);
     try {
-      // Use the new createSession API
-      const payload = {
+      const session = await api.createSession({
         agent_id: selectedAgentId,
         project_id: selectedProject?.id,
-        session_type: 'specialist',  // Default to specialist type
+        session_type: 'specialist',
         task_id: selectedTaskId || undefined,
         context: {
           description: sessionDescription,
-          kanban_stage: kanbanStage,
           project_path: selectedProject?.path || paths.projectRoot,
         },
-      };
-      console.log('[FRONTEND] Sending payload:', payload);
-      const session = await api.createSession(payload);
+      });
       onSpawn(session);
     } catch (error) {
       alert('Failed to launch session: ' + error);
@@ -1047,7 +1104,6 @@ function SpawnDialog({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 lg:p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-none lg:rounded-lg shadow-xl max-w-6xl w-full h-full lg:h-[70vh] flex flex-col">
-        {/* Header */}
         <div className="px-4 lg:px-6 py-2.5 lg:py-3 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">New session</h2>
           <button
@@ -1059,9 +1115,7 @@ function SpawnDialog({
           </button>
         </div>
 
-        {/* Two-column layout */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          {/* Left: Agent Selector */}
           <div className="flex lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-200 flex-col" style={{ maxHeight: isMobile ? '40vh' : 'auto' }}>
             <AgentSelectorPanel
               agents={projectAgents}
@@ -1073,10 +1127,8 @@ function SpawnDialog({
             />
           </div>
 
-          {/* Right: Configuration */}
           <div className="flex lg:w-1/2 flex-col">
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Session Description */}
               <div>
                 <label className="block type-label text-gray-700 mb-1.5">
                   Session Description <span className="text-red-500">*</span>
@@ -1090,7 +1142,6 @@ function SpawnDialog({
                 />
               </div>
 
-              {/* Task (optional) */}
               {activeTaskChoices.length > 0 && (
                 <div>
                   <label className="block type-label text-gray-700 mb-1.5">
@@ -1111,7 +1162,6 @@ function SpawnDialog({
                 </div>
               )}
 
-              {/* Selected Agent */}
               <div>
                 <label className="block type-label text-gray-700 mb-2">
                   Selected Agent
@@ -1132,8 +1182,8 @@ function SpawnDialog({
                   ) : (
                     <div className="h-full p-3 bg-gray-50 rounded-lg border border-gray-200">
                       {(() => {
-                        const selectedAgent = agents.find(a => a.id === selectedAgentId);
-                        if (!selectedAgent) return null;
+                        const agent = agents.find(a => a.id === selectedAgentId);
+                        if (!agent) return null;
                         return (
                           <div className="relative h-full rounded-lg border border-gray-200 bg-white p-3">
                             <button
@@ -1144,13 +1194,11 @@ function SpawnDialog({
                               <Plus className="w-3 h-3 text-gray-600 group-hover:text-white rotate-45 transition-colors" />
                             </button>
                             <div className="flex items-start gap-3">
-                              <Avatar seed={selectedAgent.name} size={40} className="w-10 h-10 flex-shrink-0" color={selectedAgent.icon_color || '#4A90E2'} />
+                              <Avatar seed={agent.name} size={40} className="w-10 h-10 flex-shrink-0" color={agent.icon_color || '#4A90E2'} />
                               <div className="flex-1 min-w-0 pr-6">
-                                <div className="type-subtitle text-gray-900 truncate">
-                                  {selectedAgent.name}
-                                </div>
+                                <div className="type-subtitle text-gray-900 truncate">{agent.name}</div>
                                 <div className="type-caption text-gray-500 line-clamp-2 mt-0.5">
-                                  {selectedAgent.description || 'No description'}
+                                  {agent.description || 'No description'}
                                 </div>
                               </div>
                             </div>
@@ -1163,7 +1211,6 @@ function SpawnDialog({
               </div>
             </div>
 
-            {/* Footer */}
             <div className="px-4 py-4 flex justify-center">
               <ModalActionButton
                 type="button"
