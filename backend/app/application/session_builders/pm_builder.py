@@ -101,6 +101,8 @@ class PMSessionBuilder(SessionBuilder):
             user_prompt_submit_hook,
             stop_hook,
             ask_user_question_pre_hook,
+            doc_guard_hook,
+            debug_tool_logger_hook,
         )
 
         # Build options dictionary
@@ -129,6 +131,15 @@ class PMSessionBuilder(SessionBuilder):
                     HookMatcher(
                         matcher="AskUserQuestion",
                         hooks=[ask_user_question_pre_hook],
+                    ),
+                    # Catch-all: log every tool name (temporary debug)
+                    HookMatcher(hooks=[debug_tool_logger_hook]),
+                ],
+                "PostToolUse": [
+                    # Warn Claude after writing doc files without explicit request
+                    HookMatcher(
+                        matcher="Write",
+                        hooks=[doc_guard_hook],
                     ),
                 ],
                 "UserPromptSubmit": [HookMatcher(hooks=[user_prompt_submit_hook])],

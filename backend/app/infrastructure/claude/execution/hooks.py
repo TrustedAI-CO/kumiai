@@ -1,9 +1,36 @@
 """Claude SDK hooks for context injection and status tracking."""
 
 import logging
+import re
+from pathlib import Path
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+
+# Doc guard: extensions that trigger the check
+_DOC_EXTENSIONS = {".md", ".txt"}
+
+# Standard doc filenames that are always allowed (case-insensitive stem)
+_ALLOWED_DOC_STEMS = {
+    "readme",
+    "claude",
+    "agents",
+    "contributing",
+    "changelog",
+    "license",
+    "skill",
+    "memory",
+    "worklog",
+}
+
+# Path fragments that mark allowed doc directories
+_ALLOWED_DOC_DIRS = re.compile(
+    r"(^|/)(\.(claude)/(commands|plans|projects)|docs|skills|\.history|memory)/"
+)
+
+# Allowed filename patterns
+_ALLOWED_DOC_PATTERNS = re.compile(r"\.plan\.md$", re.IGNORECASE)
+
 
 # Store execution references for status updates
 # Maps Claude SDK session_id -> {"execution": ..., "project_id": ..., "source_instance_id": ...}
@@ -613,3 +640,68 @@ async def get_source_instance_id_from_registry(
         return str(execution.session_id)
 
     return None
+
+
+async def debug_tool_logger_hook(
+    input_data: Dict[str, Any], tool_use_id: str, context: Any
+) -> Dict[str, Any]:
+    """Temporary debug hook: logs every tool name and input keys to identify actual tool names."""
+    tool_name = input_data.get("tool_name", "UNKNOWN")
+    tool_input = input_data.get("tool_input", {})
+    event = input_data.get("hook_event_name", "UNKNOWN")
+    logger.warning(
+        f"[DEBUG_HOOK] event={event} tool_name={tool_name!r} "
+        f"input_keys={list(tool_input.keys())}"
+    )
+    return {}
+
+
+def _is_doc_file(file_path: str) -> bool:
+    """Return True if the file path is a non-standard doc file that should trigger a warning."""
+    p = Path(file_path)
+    normalized = file_path.replace("\\", "/")
+
+    if p.suffix.lower() not in _DOC_EXTENSIONS:
+        return False
+
+    if p.stem.lower() in _ALLOWED_DOC_STEMS:
+        return False
+
+    if _ALLOWED_DOC_DIRS.search(normalized):
+        return False
+
+    if _ALLOWED_DOC_PATTERNS.search(p.name):
+        return False
+
+    return True
+
+
+async def doc_guard_hook(
+    input_data: Dict[str, Any], tool_use_id: str, context: Any
+) -> Dict[str, Any]:
+    """
+    Hook: PostToolUse for Write tool.
+    After a doc/markdown file is written, injects a warning into Claude's context
+    so it self-corrects if the write wasn't explicitly requested.
+    """
+    if input_data.get("hook_event_name") != "PostToolUse":
+        return {}
+
+    file_path = input_data.get("tool_input", {}).get("file_path", "")
+    if not file_path or not _is_doc_file(file_path):
+        return {}
+
+    logger.warning(
+        f"[DOC_GUARD] Doc file written: {file_path}. "
+        "Injecting warning into Claude context."
+    )
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": (
+                f"[Hook] WARNING: Non-standard documentation file detected\n"
+                f"[Hook] File: '{file_path}'\n"
+                "[Hook] Consider consolidating into README.md or docs/ directory"
+            ),
+        }
+    }
