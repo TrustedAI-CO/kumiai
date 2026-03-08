@@ -7,6 +7,8 @@ import { Avatar, DeleteButton } from '@/ui';
 import { StatusBadge } from '@/ui';
 import { TeamMembersDisplay } from '@/ui';
 import { STATUS_ICONS, isAnimatedStatus, DEFAULT_AGENT_COLOR, getStatusColor } from '@/constants/components';
+import { TaskBadge } from '@/components/features/tasks/TaskBadge';
+import type { TaskStatus } from '@/types/task';
 
 interface SessionCardProps {
   session: AgentInstance;
@@ -17,6 +19,8 @@ interface SessionCardProps {
   fileBasedAgents?: any[];
   isSelected?: boolean;
   showAnimation?: boolean;
+  taskName?: string;
+  taskStatus?: TaskStatus;
 }
 
 export function SessionCard({
@@ -27,7 +31,9 @@ export function SessionCard({
   dragListeners,
   fileBasedAgents,
   isSelected = false,
-  showAnimation = true
+  showAnimation = true,
+  taskName,
+  taskStatus,
 }: SessionCardProps) {
   const StatusIcon = STATUS_ICONS[session.status] || Settings;
 
@@ -119,6 +125,11 @@ export function SessionCard({
           <p className="type-caption text-gray-600 line-clamp-2 leading-tight">
             {session.current_session_description || session.context?.description}
           </p>
+        )}
+
+        {/* Task Badge */}
+        {taskName && taskStatus && (
+          <TaskBadge taskName={taskName} taskStatus={taskStatus} />
         )}
       </div>
     </CardWrapper>

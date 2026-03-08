@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, FolderOpen, Trash2, ChevronLeft, ChevronRight, Pencil, Folder, Briefcase, LayoutGrid, Table2 } from 'lucide-react';
+import { Plus, Search, FolderOpen, Trash2, ChevronLeft, ChevronRight, Pencil, Folder, Briefcase, LayoutGrid, Table2, ListTodo } from 'lucide-react';
 import { LoadingState, EmptyState } from '@/components/ui';
 import { api, type Agent, type AgentInstance, type Project, type SkillMetadata } from '@/lib/api';
 import { KanbanCard } from '@/components/features/kanban';
@@ -43,6 +43,9 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useIsMobile } from '@/hooks';
+import { useTasks } from '@/hooks/queries/useTasks';
+import { TaskListPanel } from '@/components/features/tasks';
+import type { TaskStatus } from '@/types/task';
 
 // Workflow stage column configuration
 const COLUMNS = [
@@ -60,13 +63,17 @@ function DraggableCard({
   agentDefinitions,
   onClick,
   onDelete,
-  fileBasedAgents
+  fileBasedAgents,
+  taskName,
+  taskStatus,
 }: {
   agent: AgentInstance;
   agentDefinitions: Agent[];
   onClick: () => void;
   onDelete?: (agentId: string) => void;
   fileBasedAgents?: Agent[];
+  taskName?: string;
+  taskStatus?: TaskStatus;
 }) {
   const {
     attributes,
@@ -92,6 +99,8 @@ function DraggableCard({
         onDelete={onDelete}
         dragListeners={listeners}
         fileBasedAgents={fileBasedAgents}
+        taskName={taskName}
+        taskStatus={taskStatus}
       />
     </div>
   );
@@ -123,6 +132,9 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [projectsReloadTrigger, setProjectsReloadTrigger] = useState(0);
+
+  // Task panel state
+  const [showTaskPanel, setShowTaskPanel] = useState(false);
 
   // Get session ID from URL
   const sessionIdFromUrl = searchParams.get('session');
@@ -376,6 +388,13 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
     return acc;
   }, {} as Record<ColumnId, AgentInstance[]>);
 
+  // Tasks for the current project
+  const { data: projectTasks = [] } = useTasks(selectedProject?.id);
+  const taskById = useMemo(
+    () => Object.fromEntries(projectTasks.map(t => [t.id, t])),
+    [projectTasks]
+  );
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
@@ -626,6 +645,21 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                               <span>Edit Project</span>
                             </button>
 
+                            {/* Tasks Toggle */}
+                            <button
+                              onClick={() => setShowTaskPanel(!showTaskPanel)}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border",
+                                showTaskPanel
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
+                              )}
+                              title="Toggle tasks panel"
+                            >
+                              <ListTodo className="w-4 h-4" />
+                              <span>Tasks</span>
+                            </button>
+
                             {/* New Session Button */}
                             <button
                               onClick={() => {
@@ -660,6 +694,13 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                           </div>
                         }
                       />
+
+                      {/* Task Panel (desktop only) */}
+                      {showTaskPanel && selectedProject && (
+                        <div className="hidden lg:block">
+                          <TaskListPanel projectId={selectedProject.id} />
+                        </div>
+                      )}
 
                       {/* Mobile: Session List View */}
                       <div className="flex-1 lg:hidden overflow-hidden">
@@ -708,6 +749,7 @@ export default function WorkplaceKanban({ onChatContextChange, currentProjectId,
                                     onDeleteCard={handleDelete}
                                     isLast={index === COLUMNS.length - 1}
                                     fileBasedAgents={fileBasedAgents}
+                                    taskById={taskById}
                                   />
                                 ))}
                               </div>
@@ -851,6 +893,7 @@ function KanbanColumn({
   onDeleteCard,
   isLast,
   fileBasedAgents,
+  taskById,
 }: {
   column: typeof COLUMNS[number];
   agents: AgentInstance[];
@@ -859,6 +902,7 @@ function KanbanColumn({
   onDeleteCard?: (agentId: string) => void;
   isLast?: boolean;
   fileBasedAgents?: Agent[];
+  taskById?: Record<string, { name: string; status: TaskStatus }>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -891,16 +935,21 @@ function KanbanColumn({
             <div className="text-center text-gray-400 text-sm py-8">
             </div>
           ) : (
-            agents.map((agent) => (
-              <DraggableCard
-                key={agent.instance_id}
-                agent={agent}
-                agentDefinitions={agentDefinitions}
-                onClick={() => onCardClick(agent)}
-                onDelete={onDeleteCard}
-                fileBasedAgents={fileBasedAgents}
-              />
-            ))
+            agents.map((agent) => {
+              const task = agent.task_id ? taskById?.[agent.task_id] : undefined;
+              return (
+                <DraggableCard
+                  key={agent.instance_id}
+                  agent={agent}
+                  agentDefinitions={agentDefinitions}
+                  onClick={() => onCardClick(agent)}
+                  onDelete={onDeleteCard}
+                  fileBasedAgents={fileBasedAgents}
+                  taskName={task?.name}
+                  taskStatus={task?.status}
+                />
+              );
+            })
           )}
         </SortableContext>
       </div>
@@ -923,10 +972,14 @@ function SpawnDialog({
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');  // Changed to single agent selection
   const [sessionDescription, setSessionDescription] = useState('');
   const [kanbanStage, setKanbanStage] = useState(initialStage);
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [spawning, setSpawning] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);  // Load agents from file system
   const [skills, setSkills] = useState<SkillMetadata[]>([]);
   const isMobile = useIsMobile();
+
+  const { data: availableTasks = [] } = useTasks(selectedProject?.id);
+  const activeTaskChoices = availableTasks.filter(t => t.status === 'open' || t.status === 'in_progress');
 
   // Load agents and skills on mount
   useEffect(() => {
@@ -974,6 +1027,7 @@ function SpawnDialog({
         agent_id: selectedAgentId,
         project_id: selectedProject?.id,
         session_type: 'specialist',  // Default to specialist type
+        task_id: selectedTaskId || undefined,
         context: {
           description: sessionDescription,
           kanban_stage: kanbanStage,
@@ -1035,6 +1089,27 @@ function SpawnDialog({
                   className="px-4 py-2 resize-none"
                 />
               </div>
+
+              {/* Task (optional) */}
+              {activeTaskChoices.length > 0 && (
+                <div>
+                  <label className="block type-label text-gray-700 mb-1.5">
+                    Task <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={selectedTaskId}
+                    onChange={(e) => setSelectedTaskId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No task</option>
+                    {activeTaskChoices.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        [{t.status === 'in_progress' ? 'In Progress' : 'Open'}] {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Selected Agent */}
               <div>

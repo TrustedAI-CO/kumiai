@@ -1,5 +1,6 @@
 // API client for backend
 import type { McpServer } from '@/types';
+import type { Task, CreateTaskRequest, UpdateTaskRequest } from '@/types/task';
 
 // Use environment variable or construct from current hostname
 const getApiBase = () => {
@@ -55,6 +56,7 @@ export interface AgentInstance {
   actual_mcp_servers?: any[];
   actual_skills?: string[];
   auto_started?: boolean;  // Whether session was auto-started in background
+  task_id?: string | null;  // Task this session is bound to (nullable)
   // Timestamps from backend (optional for backward compatibility)
   created_at?: string;
   updated_at?: string;
@@ -83,6 +85,7 @@ export interface CreateSessionRequest {
   agent_id: string;  // Agent string ID (e.g., 'product-manager')
   project_id?: string;  // UUID of the project
   session_type: string;  // pm, specialist, assistant
+  task_id?: string;  // Optional task to bind this session to
   context?: Record<string, any>;  // Initial session context
 }
 
@@ -704,6 +707,46 @@ export const api = {
   async resetApp(): Promise<void> {
     const res = await fetch(`${API_BASE}/api/v1/system/reset`, {
       method: 'POST',
+    });
+    if (!res.ok) throw new Error(await res.text());
+  },
+
+  // Task Management
+  async getProjectTasks(projectId: string): Promise<Task[]> {
+    const res = await fetch(`${API_BASE}/api/v1/projects/${projectId}/tasks`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async getTask(taskId: string): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/v1/tasks/${taskId}`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async createTask(projectId: string, req: CreateTaskRequest): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/v1/projects/${projectId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async updateTask(taskId: string, req: UpdateTaskRequest): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/v1/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async deleteTask(taskId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/v1/tasks/${taskId}`, {
+      method: 'DELETE',
     });
     if (!res.ok) throw new Error(await res.text());
   },

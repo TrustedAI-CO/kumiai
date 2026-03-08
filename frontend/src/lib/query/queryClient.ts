@@ -89,5 +89,9 @@ export const queryKeys = {
   files: (contextType: 'project' | 'session', contextId: string) =>
     ['files', contextType, contextId] as const,
   file: (contextType: 'project' | 'session', contextId: string, path: string) =>
-    ['files', contextType, contextId, path] as const
+    ['files', contextType, contextId, path] as const,
+
+  // Tasks
+  tasks: (projectId: string) => ['tasks', { projectId }] as const,
+  task: (id: string) => ['tasks', id] as const,
 } as const;
