@@ -38,15 +38,26 @@ class UsageResult:
 # Credential readers
 # ---------------------------------------------------------------------------
 
+
 def _read_claude_token() -> Optional[str]:
     """Read Claude OAuth access token from macOS Keychain or credentials file."""
     if platform.system() == "Darwin":
         try:
-            raw = subprocess.check_output(
-                ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-                timeout=3,
-                stderr=subprocess.DEVNULL,
-            ).decode().strip()
+            raw = (
+                subprocess.check_output(
+                    [
+                        "security",
+                        "find-generic-password",
+                        "-s",
+                        "Claude Code-credentials",
+                        "-w",
+                    ],
+                    timeout=3,
+                    stderr=subprocess.DEVNULL,
+                )
+                .decode()
+                .strip()
+            )
             data = json.loads(raw)
             token = (data.get("claudeAiOauth") or {}).get("accessToken")
             if token:
@@ -87,11 +98,23 @@ def _read_gemini_creds_from_keychain() -> Optional[Dict[str, Any]]:
     if platform.system() != "Darwin":
         return None
     try:
-        raw = subprocess.check_output(
-            ["security", "find-generic-password", "-s", "gemini-cli-oauth", "-a", "main-account", "-w"],
-            timeout=3,
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
+        raw = (
+            subprocess.check_output(
+                [
+                    "security",
+                    "find-generic-password",
+                    "-s",
+                    "gemini-cli-oauth",
+                    "-a",
+                    "main-account",
+                    "-w",
+                ],
+                timeout=3,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
         if not raw:
             return None
         stored = json.loads(raw)
@@ -129,7 +152,9 @@ def _read_gemini_creds() -> Optional[Dict[str, Any]]:
 
 async def _get_gemini_project_id(token: str) -> Optional[str]:
     """Get Gemini Cloud project ID."""
-    env_project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+    env_project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get(
+        "GOOGLE_CLOUD_PROJECT_ID"
+    )
     if env_project:
         return env_project
 
@@ -172,6 +197,7 @@ async def _get_gemini_project_id(token: str) -> Optional[str]:
 # Usage fetchers
 # ---------------------------------------------------------------------------
 
+
 async def fetch_claude_usage() -> UsageResult:
     """Fetch Claude usage from Anthropic OAuth usage API."""
     token = _read_claude_token()
@@ -202,11 +228,13 @@ async def fetch_claude_usage() -> UsageResult:
                 entry = data.get(key)
                 if entry and isinstance(entry, dict):
                     util_raw = entry.get("utilization", 0)
-                    windows.append(UsageWindow(
-                        label=label,
-                        utilization=round(util_raw) / 100,  # API returns 0-100
-                        resets_at=entry.get("resets_at"),
-                    ))
+                    windows.append(
+                        UsageWindow(
+                            label=label,
+                            utilization=round(util_raw) / 100,  # API returns 0-100
+                            resets_at=entry.get("resets_at"),
+                        )
+                    )
             return UsageResult(windows=windows)
     except Exception as e:
         logger.warning("claude_usage_fetch_failed", error=str(e))
@@ -238,20 +266,24 @@ async def fetch_codex_usage() -> UsageResult:
             pw = rate_limit.get("primary_window")
             if pw:
                 reset_ts = pw.get("reset_at")
-                windows.append(UsageWindow(
-                    label="5-hour",
-                    utilization=(pw.get("used_percent", 0)) / 100,
-                    resets_at=_ts_to_iso(reset_ts) if reset_ts else None,
-                ))
+                windows.append(
+                    UsageWindow(
+                        label="5-hour",
+                        utilization=(pw.get("used_percent", 0)) / 100,
+                        resets_at=_ts_to_iso(reset_ts) if reset_ts else None,
+                    )
+                )
 
             sw = rate_limit.get("secondary_window")
             if sw:
                 reset_ts = sw.get("reset_at")
-                windows.append(UsageWindow(
-                    label="7-day",
-                    utilization=(sw.get("used_percent", 0)) / 100,
-                    resets_at=_ts_to_iso(reset_ts) if reset_ts else None,
-                ))
+                windows.append(
+                    UsageWindow(
+                        label="7-day",
+                        utilization=(sw.get("used_percent", 0)) / 100,
+                        resets_at=_ts_to_iso(reset_ts) if reset_ts else None,
+                    )
+                )
 
             return UsageResult(windows=windows)
     except Exception as e:
@@ -290,11 +322,13 @@ async def fetch_gemini_usage() -> UsageResult:
                 if model_id.endswith("_vertex"):
                     continue
                 remaining = bucket.get("remainingFraction", 1.0)
-                windows.append(UsageWindow(
-                    label=model_id,
-                    utilization=round((1 - remaining) * 100) / 100,
-                    resets_at=bucket.get("resetTime"),
-                ))
+                windows.append(
+                    UsageWindow(
+                        label=model_id,
+                        utilization=round((1 - remaining) * 100) / 100,
+                        resets_at=bucket.get("resetTime"),
+                    )
+                )
             return UsageResult(windows=windows)
     except Exception as e:
         logger.warning("gemini_usage_fetch_failed", error=str(e))
@@ -304,6 +338,7 @@ async def fetch_gemini_usage() -> UsageResult:
 async def fetch_all_usage() -> Dict[str, UsageResult]:
     """Fetch usage for all providers in parallel."""
     import asyncio
+
     results = await asyncio.gather(
         fetch_claude_usage(),
         fetch_codex_usage(),
@@ -324,4 +359,5 @@ async def fetch_all_usage() -> Dict[str, UsageResult]:
 def _ts_to_iso(ts: int) -> str:
     """Convert Unix timestamp (seconds) to ISO 8601 string."""
     from datetime import datetime, timezone
+
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()

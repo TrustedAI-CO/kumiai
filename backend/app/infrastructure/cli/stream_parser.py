@@ -117,7 +117,9 @@ def parse_gemini_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
         return None
 
     if event_type == "error":
-        error_payload = data.get("error", data.get("message", "Gemini execution failed"))
+        error_payload = data.get(
+            "error", data.get("message", "Gemini execution failed")
+        )
         if isinstance(error_payload, dict):
             message = str(error_payload.get("message") or error_payload)
         else:
@@ -225,7 +227,9 @@ def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
 
     if event_type == "turn.failed":
         error = data.get("error", {})
-        error_msg = _extract_text(error.get("message") if isinstance(error, dict) else error)
+        error_msg = _extract_text(
+            error.get("message") if isinstance(error, dict) else error
+        )
         if not error_msg:
             error_msg = str(data)
         return ParsedEvent(event_type="error", content=error_msg, raw=data)
@@ -239,7 +243,9 @@ def parse_codex_stream_event(data: Dict[str, Any]) -> Optional[ParsedEvent]:
 
     # Some wrappers may emit final output in alternate result events.
     if event_type in ("response.completed", "message.completed"):
-        text = _extract_text(data.get("output") or data.get("message") or data.get("content"))
+        text = _extract_text(
+            data.get("output") or data.get("message") or data.get("content")
+        )
         if text:
             return ParsedEvent(event_type="text", content=text, raw=data)
         return ParsedEvent(event_type="complete", content="", raw=data)

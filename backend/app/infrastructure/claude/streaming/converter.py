@@ -379,7 +379,10 @@ def _extract_codeagent_dict_events(
     - {"type": "error", "error": {"message": ...}}           → error
     - {"type": "result", ...}                                → completion
     """
-    from app.infrastructure.claude.streaming.events import ContentBlockEvent, ContentBlockStopEvent
+    from app.infrastructure.claude.streaming.events import (
+        ContentBlockEvent,
+        ContentBlockStopEvent,
+    )
 
     def _safe_content_index(value: Any) -> int:
         try:
@@ -400,7 +403,9 @@ def _extract_codeagent_dict_events(
                     StreamDeltaEvent(
                         session_id=session_id,
                         content=text,
-                        content_index=_safe_content_index(message.get("content_index", 0)),
+                        content_index=_safe_content_index(
+                            message.get("content_index", 0)
+                        ),
                     )
                 )
 
@@ -443,6 +448,7 @@ def _extract_codeagent_dict_events(
         tool_use_id = message.get("id", "")
         if not tool_use_id:
             import uuid
+
             tool_use_id = uuid.uuid4().hex
             logger.warning(
                 "codeagent_tool_use_missing_id",
@@ -476,7 +482,11 @@ def _extract_codeagent_dict_events(
 
     elif msg_type == "error":
         error_data = message.get("error", {})
-        error_msg = error_data.get("message", "Unknown error") if isinstance(error_data, dict) else str(error_data)
+        error_msg = (
+            error_data.get("message", "Unknown error")
+            if isinstance(error_data, dict)
+            else str(error_data)
+        )
         events.append(
             ErrorEvent(
                 session_id=session_id,
