@@ -12,8 +12,14 @@ from uuid import UUID, uuid4
 from app.application.dtos.session_dto import SessionDTO
 from app.domain.entities import Session as SessionEntity
 from app.domain.value_objects import SessionType, SessionStatus
+from app.domain.value_objects.task_status import TaskStatus
 from app.infrastructure.database.connection import get_repository_session
 from app.infrastructure.database.repositories import SessionRepositoryImpl
+from app.infrastructure.database.repositories.task_repository import TaskRepositoryImpl
+from app.infrastructure.database.repositories.project_repository import (
+    ProjectRepositoryImpl,
+)
+from app.infrastructure.filesystem.agent_repository import FileBasedAgentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ def _error(message: str) -> Dict[str, Any]:
     {
         "agent_id": str,
         "task_description": str,
+        "task_id": str,
     },
 )
 async def spawn_instance(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -48,6 +55,7 @@ async def spawn_instance(args: Dict[str, Any]) -> Dict[str, Any]:
         project_id_str = args.get("project_id", "")
         agent_id = args.get("agent_id", "")
         task_description = args.get("task_description", "")
+        task_id_str = args.get("task_id", "")
 
         if not project_id_str:
             return _error("project_id is required")
@@ -61,36 +69,49 @@ async def spawn_instance(args: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError:
             return _error(f"Invalid project_id format: {project_id_str}")
 
+        task_id: UUID | None = None
+        if task_id_str:
+            try:
+                task_id = UUID(task_id_str)
+            except ValueError:
+                return _error(f"Invalid task_id format: {task_id_str}")
+
         logger.info(
             f"[PM_TOOLS] Spawning specialist session: "
             f"project={project_id}, agent={agent_id}, task={task_description[:100]}..."
         )
 
         # Validate agent exists before creating session
-        from app.infrastructure.filesystem.agent_repository import (
-            FileBasedAgentRepository,
-        )
         from app.core.config import settings
 
         agent_repo = FileBasedAgentRepository(settings.agents_dir)
         agent = await agent_repo.get_by_id(agent_id)
 
         if not agent:
-            # Get list of available agents to help PM
             available_agents = await agent_repo.get_all()
             available_agent_ids = [a.id for a in available_agents]
-
             error_msg = f"Agent '{agent_id}' not found. Available agents: {', '.join(repr(aid) for aid in available_agent_ids)}"
             logger.warning(f"[PM_TOOLS] {error_msg}")
             return _error(error_msg)
 
-        # Create session entity directly
+        # Validate task_id belongs to the same project
+        if task_id is not None:
+            async with get_repository_session() as db:
+                task_repo = TaskRepositoryImpl(db)
+                task_entity = await task_repo.get_by_id(task_id)
+            if task_entity is None:
+                return _error(f"Task {task_id} not found")
+            if str(task_entity.project_id) != str(project_id):
+                return _error(f"Task {task_id} does not belong to project {project_id}")
+
+        # Create session entity
         session_entity = SessionEntity(
             id=uuid4(),
             agent_id=agent_id,
             project_id=project_id,
             session_type=SessionType.SPECIALIST,
             status=SessionStatus.INITIALIZING,
+            task_id=task_id,
             context={
                 "task_description": task_description,
                 "description": task_description,  # Frontend compatibility
@@ -111,21 +132,25 @@ async def spawn_instance(args: Dict[str, Any]) -> Dict[str, Any]:
             f"for agent {agent_id} in project {project_id}"
         )
 
+        task_line = f"\nTask ID: {task_id}" if task_id else ""
         result_text = f"""✓ Specialist session created successfully!
 
 Session ID: {new_session.id}
 Agent: {agent_id}
-Task: {task_description}
+Task: {task_description}{task_line}
 Status: {new_session.status}
 
 ⚠️  Instance is in {new_session.status} status. Use contact_instance to send the first message and start execution."""
 
-        return {
+        response: Dict[str, Any] = {
             "content": [{"type": "text", "text": result_text}],
             "session_id": str(new_session.id),
             "agent_id": agent_id,
             "project_id": str(project_id),
         }
+        if task_id:
+            response["task_id"] = str(task_id)
+        return response
 
     except Exception as e:
         logger.error(f"[PM_TOOLS] Error spawning session: {e}", exc_info=True)
@@ -632,6 +657,242 @@ Stage: {old_stage} → {new_stage}"""
         return _error(f"Failed to update instance stage: {str(e)}")
 
 
+@tool(
+    "create_task",
+    "Create a new task in the current project",
+    {
+        "name": str,
+        "description": str,
+    },
+)
+async def create_task(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a task that groups related sessions toward a shared goal.
+
+    Args (from args dict):
+        name: Task name (required, non-empty)
+        description: Optional longer description of the task
+        project_id: UUID of the project (auto-injected by hook)
+
+    Returns:
+        Dict with content array containing task creation confirmation
+    """
+    try:
+        project_id_str = args.get("project_id", "")
+        name = args.get("name", "").strip()
+        description = args.get("description", "") or None
+
+        if not project_id_str:
+            return _error("project_id is required (should be auto-injected)")
+        if not name:
+            return _error("name is required and must not be empty")
+
+        try:
+            project_id = UUID(project_id_str)
+        except ValueError:
+            return _error(f"Invalid project_id format: {project_id_str}")
+
+        async with get_repository_session() as db:
+            project_repo = ProjectRepositoryImpl(db)
+            project = await project_repo.get_by_id(project_id)
+            if project is None:
+                return _error(f"Project {project_id} not found")
+
+            task_repo = TaskRepositoryImpl(db)
+            from app.domain.entities.task import Task as TaskEntity
+
+            task_entity = TaskEntity(
+                id=uuid4(),
+                project_id=project_id,
+                name=name,
+                description=description,
+            )
+            task_entity.validate()
+            created = await task_repo.create(task_entity)
+            await db.commit()
+
+        logger.info(f"[PM_TOOLS] Created task {created.id} in project {project_id}")
+
+        result_text = f"""✓ Task created successfully!
+
+Task ID: {created.id}
+Name: {created.name}
+Status: {created.status.value if hasattr(created.status, "value") else str(created.status)}
+
+Use spawn_instance with task_id={created.id} to bind sessions to this task."""
+
+        return {
+            "content": [{"type": "text", "text": result_text}],
+            "task_id": str(created.id),
+            "project_id": str(project_id),
+        }
+
+    except Exception as e:
+        logger.error(f"[PM_TOOLS] Error creating task: {e}", exc_info=True)
+        return _error(f"Failed to create task: {str(e)}")
+
+
+@tool(
+    "list_tasks",
+    "List all tasks in the current project with their status",
+    {},
+)
+async def list_tasks(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    List all tasks in the project, grouped by status.
+
+    Args (from args dict):
+        project_id: UUID of the project (auto-injected by hook)
+
+    Returns:
+        Dict with content array containing task list
+    """
+    try:
+        project_id_str = args.get("project_id", "")
+        if not project_id_str:
+            return _error("project_id is required (should be auto-injected)")
+
+        try:
+            project_id = UUID(project_id_str)
+        except ValueError:
+            return _error(f"Invalid project_id format: {project_id_str}")
+
+        async with get_repository_session() as db:
+            task_repo = TaskRepositoryImpl(db)
+            tasks = await task_repo.get_by_project_id(project_id)
+
+        if not tasks:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "No tasks found for this project.\n\nUse create_task to add tasks and organize your work.",
+                    }
+                ],
+                "tasks": [],
+            }
+
+        # Group by status
+        grouped: Dict[str, list] = {}
+        for task in tasks:
+            status = (
+                task.status.value if hasattr(task.status, "value") else str(task.status)
+            )
+            grouped.setdefault(status, []).append(task)
+
+        result_text = f"**Tasks ({len(tasks)}):**\n"
+        status_order = ["open", "in_progress", "done", "archived"]
+        for status in status_order:
+            if status not in grouped:
+                continue
+            result_text += f"\n**{status.upper()} ({len(grouped[status])}):**\n"
+            for task in grouped[status]:
+                desc = (
+                    f" — {task.description[:60]}..."
+                    if task.description and len(task.description) > 60
+                    else (f" — {task.description}" if task.description else "")
+                )
+                result_text += f"  • [{task.id}] {task.name}{desc}\n"
+
+        task_list = [
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "status": (
+                    t.status.value if hasattr(t.status, "value") else str(t.status)
+                ),
+                "description": t.description,
+            }
+            for t in tasks
+        ]
+
+        return {
+            "content": [{"type": "text", "text": result_text}],
+            "tasks": task_list,
+        }
+
+    except Exception as e:
+        logger.error(f"[PM_TOOLS] Error listing tasks: {e}", exc_info=True)
+        return _error(f"Failed to list tasks: {str(e)}")
+
+
+_VALID_TASK_STATUSES = ["open", "in_progress", "done", "archived"]
+
+
+@tool(
+    "update_task_status",
+    "Move a task through workflow statuses (open → in_progress → done → archived)",
+    {
+        "task_id": str,
+        "new_status": str,
+    },
+)
+async def update_task_status(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update the status of a task.
+
+    Args (from args dict):
+        task_id: UUID of the task to update
+        new_status: Target status — one of: open, in_progress, done, archived
+        project_id: UUID of the project (auto-injected by hook)
+
+    Returns:
+        Dict with content array containing update confirmation
+    """
+    try:
+        task_id_str = args.get("task_id", "")
+        new_status = args.get("new_status", "").lower().strip()
+
+        if not task_id_str:
+            return _error("task_id is required")
+        if not new_status:
+            return _error("new_status is required")
+        if new_status not in _VALID_TASK_STATUSES:
+            return _error(
+                f"Invalid status '{new_status}'. Must be one of: {', '.join(_VALID_TASK_STATUSES)}"
+            )
+
+        try:
+            task_id = UUID(task_id_str)
+        except ValueError:
+            return _error(f"Invalid task_id format: {task_id_str}")
+
+        async with get_repository_session() as db:
+            task_repo = TaskRepositoryImpl(db)
+            task_entity = await task_repo.get_by_id(task_id)
+            if task_entity is None:
+                return _error(f"Task {task_id} not found")
+
+            old_status = (
+                task_entity.status.value
+                if hasattr(task_entity.status, "value")
+                else str(task_entity.status)
+            )
+            task_entity.status = TaskStatus(new_status)
+            updated = await task_repo.update(task_entity)
+            await db.commit()
+
+        logger.info(
+            f"[PM_TOOLS] Updated task {task_id} status: {old_status} → {new_status}"
+        )
+
+        result_text = f"""✓ Task status updated!
+
+Task: {updated.name} [{task_id}]
+Status: {old_status} → {new_status}"""
+
+        return {
+            "content": [{"type": "text", "text": result_text}],
+            "task_id": str(task_id),
+            "old_status": old_status,
+            "new_status": new_status,
+        }
+
+    except Exception as e:
+        logger.error(f"[PM_TOOLS] Error updating task status: {e}", exc_info=True)
+        return _error(f"Failed to update task status: {str(e)}")
+
+
 # Create the MCP server with PM management tools
 pm_management_server = create_sdk_mcp_server(
     name="pm_management",
@@ -642,5 +903,8 @@ pm_management_server = create_sdk_mcp_server(
         list_team_members,
         get_project_status,
         update_instance_stage,
+        create_task,
+        list_tasks,
+        update_task_status,
     ],
 )
