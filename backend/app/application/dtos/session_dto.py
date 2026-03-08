@@ -13,6 +13,7 @@ class SessionDTO(TimestampedDTO):
     id: UUID
     agent_id: str
     project_id: Optional[UUID]
+    task_id: Optional[UUID] = None
     session_type: str
     status: str
     claude_session_id: Optional[str]
@@ -40,6 +41,7 @@ class SessionDTO(TimestampedDTO):
             id=entity.id,
             agent_id=entity.agent_id,
             project_id=entity.project_id,
+            task_id=entity.task_id,
             session_type=entity.session_type.value,
             status=entity.status.value,
             claude_session_id=entity.claude_session_id,

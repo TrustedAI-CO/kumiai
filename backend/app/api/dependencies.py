@@ -13,6 +13,7 @@ from app.application.services import (
     UserProfileService,
 )
 from app.application.services.agent_service import AgentService
+from app.application.services.task_service import TaskService
 from app.core.config import settings
 from app.core.dependencies import get_db
 from app.infrastructure.database.repositories import (
@@ -20,6 +21,7 @@ from app.infrastructure.database.repositories import (
     PostgresUserProfileRepository,
     ProjectRepositoryImpl,
     SessionRepositoryImpl,
+    TaskRepositoryImpl,
 )
 from app.infrastructure.filesystem import FileBasedSkillRepository, FileService
 from app.infrastructure.filesystem.agent_repository import FileBasedAgentRepository
@@ -233,6 +235,16 @@ def get_session_executor(
     if _session_executor is None:
         _session_executor = SessionExecutor(client_manager=client_manager)
     return _session_executor
+
+
+async def get_task_service(
+    db: AsyncSession = Depends(get_db),
+) -> TaskService:
+    """Get TaskService with injected repositories."""
+    return TaskService(
+        task_repo=TaskRepositoryImpl(db),
+        project_repo=ProjectRepositoryImpl(db),
+    )
 
 
 def get_sse_manager() -> SSEManager:

@@ -36,6 +36,7 @@ class Session:
     project_id: Optional[UUID]
     session_type: SessionType
     status: SessionStatus
+    task_id: Optional[UUID] = None  # Optional task grouping
     claude_session_id: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None

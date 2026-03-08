@@ -43,3 +43,9 @@ class AgentNotFoundError(ServiceError):
     """Agent not found."""
 
     pass
+
+
+class TaskNotFoundError(ServiceError):
+    """Task not found."""
+
+    pass

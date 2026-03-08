@@ -18,6 +18,7 @@ from app.api.routes import (
     session_files,
     skills,
     system,
+    tasks,
     user_profile,
 )
 from app.core.config import settings
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
     app.include_router(session_files.router, prefix="/api/v1", tags=["Session Files"])
     app.include_router(projects.router, prefix="/api/v1", tags=["Projects"])
+    app.include_router(tasks.router, prefix="/api/v1", tags=["Tasks"])
     app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
     app.include_router(skills.router, prefix="/api/v1", tags=["Skills"])
     app.include_router(messages.router, prefix="/api/v1", tags=["Messages"])

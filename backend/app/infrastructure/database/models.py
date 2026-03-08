@@ -148,6 +148,11 @@ class Session(Base):
         nullable=False,
         server_default="initializing",
     )
+    task_id: Mapped[Optional[UUID]] = mapped_column(
+        GUID,
+        ForeignKey("tasks.id", name="fk_sessions_task_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     claude_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     context: Mapped[dict] = mapped_column(JSON, nullable=False, server_default="{}")
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -162,6 +167,9 @@ class Session(Base):
     # Relationships
     project: Mapped[Optional["Project"]] = relationship(
         "Project", foreign_keys=[project_id], post_update=True
+    )
+    task: Mapped[Optional["Task"]] = relationship(
+        "Task", foreign_keys=[task_id], back_populates="sessions"
     )
     messages: Mapped[List["Message"]] = relationship(
         "Message", back_populates="session", cascade="all, delete-orphan"
@@ -253,6 +261,47 @@ class Message(Base):
             "response_id",
             postgresql_where="response_id IS NOT NULL",
         ),
+    )
+
+
+class Task(Base):
+    """Task model — groups sessions working toward the same goal."""
+
+    __tablename__ = "tasks"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=uuid4)
+    project_id: Mapped[UUID] = mapped_column(
+        GUID,
+        ForeignKey("projects.id", name="fk_tasks_project_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="open"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    # Relationships
+    project: Mapped["Project"] = relationship("Project", foreign_keys=[project_id])
+    sessions: Mapped[List["Session"]] = relationship("Session", back_populates="task")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="chk_tasks_name_not_empty"),
+        Index(
+            "idx_tasks_project_id",
+            "project_id",
+            postgresql_where="deleted_at IS NULL",
+        ),
+        Index("idx_tasks_status", "status", postgresql_where="deleted_at IS NULL"),
+        Index("idx_tasks_deleted_at", "deleted_at"),
     )
 
 
