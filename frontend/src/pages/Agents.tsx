@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   api,
   Agent,
-  UpdateAgentRequest
+  UpdateAgentRequest,
+  CLIBackendInfo,
 } from '@/lib/api';
 import type { ChatContext } from '@/types/chat';
 import type { McpServer, SkillMetadata, FileNode } from '@/types';
@@ -50,6 +51,7 @@ export default function Agents({ onChatContextChange }: AgentsProps) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const [agentsReloadTrigger, setAgentsReloadTrigger] = useState(0);
+  const [cliBackends, setCLIBackends] = useState<CLIBackendInfo[]>([]);
 
   // Responsive hooks
   const isMobile = useIsMobile();
@@ -64,6 +66,7 @@ export default function Agents({ onChatContextChange }: AgentsProps) {
     loadAgents();
     loadAvailableSkills();
     loadAvailableMcpServers();
+    loadCLIBackends();
 
     // Set chat context to agents library on mount
     if (onChatContextChange) {
@@ -100,6 +103,21 @@ export default function Agents({ onChatContextChange }: AgentsProps) {
     } catch (error) {
       console.error('Failed to load MCP servers:', error);
     }
+  };
+
+  const loadCLIBackends = async () => {
+    try {
+      const data = await api.getCLIBackends();
+      setCLIBackends(data.backends);
+    } catch (error) {
+      console.error('Failed to load CLI backends:', error);
+    }
+  };
+
+  // Get available models for the selected backend
+  const getModelsForBackend = (backend: string): string[] => {
+    const info = cliBackends.find(b => b.name === backend);
+    return info?.available_models || [];
   };
 
   const loadAgents = async () => {
@@ -516,15 +534,51 @@ export default function Agents({ onChatContextChange }: AgentsProps) {
                   </div>
 
                   <div>
-                    <label className="block type-caption text-gray-600 mb-1">Default Model</label>
+                    <label className="block type-caption text-gray-600 mb-1">CLI Backend</label>
+                    <select
+                      value={pendingChanges.cli_backend !== undefined ? pendingChanges.cli_backend : selectedAgent.cli_backend}
+                      onChange={(e) => {
+                        const newBackend = e.target.value;
+                        const backendInfo = cliBackends.find(b => b.name === newBackend);
+                        handleUpdateAgent({
+                          cli_backend: newBackend,
+                          default_model: backendInfo?.default_model || 'sonnet',
+                        });
+                      }}
+                      className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 focus-visible:border-input disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                    >
+                      {cliBackends.length === 0 ? (
+                        <option value="" disabled>No CLI backends available</option>
+                      ) : (
+                        cliBackends.map(b => (
+                          <option key={b.name} value={b.name} disabled={!b.installed}>
+                            {b.name}{b.installed ? '' : ' (not installed)'}{b.version ? ` v${b.version}` : ''}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block type-caption text-gray-600 mb-1">Model</label>
                     <select
                       value={pendingChanges.default_model !== undefined ? pendingChanges.default_model : selectedAgent.default_model}
                       onChange={(e) => handleUpdateModel(e.target.value)}
                       className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 focus-visible:border-input disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                     >
-                      <option value="haiku">Haiku (Fast)</option>
-                      <option value="sonnet">Sonnet (Balanced)</option>
-                      <option value="opus">Opus (Powerful)</option>
+                      {(() => {
+                        const currentBackend = pendingChanges.cli_backend !== undefined ? pendingChanges.cli_backend : selectedAgent.cli_backend;
+                        const models = getModelsForBackend(currentBackend);
+                        return models.length > 0 ? models.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        )) : (
+                          <>
+                            <option value="haiku">Haiku (Fast)</option>
+                            <option value="sonnet">Sonnet (Balanced)</option>
+                            <option value="opus">Opus (Powerful)</option>
+                          </>
+                        );
+                      })()}
                     </select>
                   </div>
 

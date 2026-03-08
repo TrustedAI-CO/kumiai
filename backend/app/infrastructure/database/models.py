@@ -148,6 +148,11 @@ class Session(Base):
         nullable=False,
         server_default="initializing",
     )
+    cli_backend: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default="claude",
+    )
     claude_session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     context: Mapped[dict] = mapped_column(JSON, nullable=False, server_default="{}")
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

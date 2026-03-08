@@ -14,6 +14,7 @@ interface ItemCardProps {
   showRemoveButton?: boolean;
   isSelected?: boolean;
   className?: string;
+  badge?: ReactNode;
 }
 
 /**
@@ -30,6 +31,7 @@ export const ItemCard = memo(function ItemCard({
   showRemoveButton = false,
   isSelected = false,
   className = '',
+  badge,
 }: ItemCardProps) {
   const handleClick = () => {
     if (onRemove && showRemoveButton) {
@@ -63,6 +65,7 @@ export const ItemCard = memo(function ItemCard({
           <h3 className="type-subtitle truncate flex-1 min-w-0">
             {name}
           </h3>
+          {badge && <div className="flex-shrink-0">{badge}</div>}
         </div>
       </CardHeader>
 

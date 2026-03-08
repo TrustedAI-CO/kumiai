@@ -14,6 +14,7 @@ class AgentDTO(BaseModel):
     name: str
     description: Optional[str]
     file_path: str
+    cli_backend: str
     default_model: str
     tags: List[str]
     skills: List[str]
@@ -29,6 +30,7 @@ class AgentDTO(BaseModel):
             name=entity.name,
             description=entity.description,
             file_path=entity.file_path,
+            cli_backend=entity.cli_backend,
             default_model=entity.default_model,
             tags=entity.tags,
             skills=entity.skills,

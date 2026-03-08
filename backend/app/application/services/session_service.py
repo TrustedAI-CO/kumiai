@@ -75,6 +75,12 @@ class SessionService:
 
             await self._project_repo.get_or_raise(request.project_id, "Project")
 
+        # Resolve cli_backend from agent config
+        cli_backend = "claude"
+        agent = await self._agent_repo.get_by_id(request.agent_id)
+        if agent:
+            cli_backend = getattr(agent, "cli_backend", "claude")
+
         # Create domain entity
         session = Session(
             id=uuid4(),
@@ -82,6 +88,7 @@ class SessionService:
             project_id=request.project_id,
             session_type=session_type,
             status=SessionStatus.INITIALIZING,
+            cli_backend=cli_backend,
             context=request.context or {},
         )
 

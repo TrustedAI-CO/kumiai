@@ -36,6 +36,7 @@ class Session:
     project_id: Optional[UUID]
     session_type: SessionType
     status: SessionStatus
+    cli_backend: str = "claude"  # CLI backend (claude, codex, gemini, opencode)
     claude_session_id: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None
@@ -160,6 +161,12 @@ class Session:
 
         if self.session_type == SessionType.PM and not self.project_id:
             raise ValidationError("PM sessions must have a project_id")
+
+        valid_backends = {"claude", "codex", "gemini", "opencode"}
+        if self.cli_backend not in valid_backends:
+            raise ValidationError(
+                f"Invalid cli_backend '{self.cli_backend}'. Must be one of: {valid_backends}"
+            )
 
     def sync_kanban_stage(self) -> None:
         """
