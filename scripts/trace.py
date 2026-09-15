@@ -133,11 +133,17 @@ def load_specs() -> dict:
 
 
 def _ignored_dirs() -> set:
-    """Top-level git-ignored directories — vendored trees we must never scan.
+    """Git-ignored directory paths — vendored trees we must never scan.
 
     A glob like `**/tests/**/*.py` will happily walk a 40k-file vendored checkout that
     git already knows to ignore, which is both slow and a source of decode/IsADirectory
     crashes. Ask git once instead of maintaining PRUNE by hand.
+
+    These are FULL relative paths, not top-level names. Keeping only the first path
+    segment silently pruned the whole repo: `backend/.venv/` and
+    `frontend/node_modules/` are ignored, and their first segments are `backend` and
+    `frontend` — the entire source tree. Every feature then reported `gap 0/N` because
+    no `# feature:`/`# spec:` tag was ever scanned, while `audit` still exited 0.
     """
     try:
         out = subprocess.run(
@@ -147,7 +153,7 @@ def _ignored_dirs() -> set:
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return set()
-    return {line.rstrip("/").split("/")[0] for line in out.splitlines() if line.strip()}
+    return {line.rstrip("/") for line in out.splitlines() if line.strip()}
 
 
 _IGNORED = None
@@ -158,7 +164,9 @@ def _pruned(f: Path) -> bool:
     if _IGNORED is None:
         _IGNORED = _ignored_dirs()
     rel = f.relative_to(ROOT).as_posix()
-    if rel.split("/")[0] in _IGNORED:
+    # Prune only if the file sits under an ignored directory — match on a path-segment
+    # boundary so `backend/.venv/...` is pruned without pruning `backend/app/...`.
+    if any(rel == ig or rel.startswith(ig + "/") for ig in _IGNORED):
         return True
     return any(seg in "/" + rel for seg in PRUNE)
 
