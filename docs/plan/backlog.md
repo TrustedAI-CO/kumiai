@@ -13,6 +13,24 @@ Scheduled deferred work — will do, just not this PR.
 - [ ] Fan-out join/barrier primitive so a coordinator wakes once when a spawned set
       resolves, instead of once per child — deferred 2026-09-15, same split
 
+- [ ] **Dedup runtime notifications against the child's own report (COORD-03 R2).** Deferred
+      2026-09-15 from `feat/session-parent-notify`. Without it a coordinator may receive both
+      the child's report and the runtime notice for one turn — duplication, not falsehood.
+      Needs: a turn-generation-scoped registry, the flag set synchronously in the tool body
+      *before* `asyncio.create_task` (`common_tools.py:200`, `:430`), popped under the status
+      manager's per-session lock via a new public accessor, and a decision on the
+      `contact_pm` divergence (it resolves `get_latest_pm_session(project_id)`, which is not
+      always the recorded parent). Start at `common_tools.py` `contact_instance`/`contact_pm`.
+- [ ] **Recover outcomes across a backend restart (COORD-02 R4).** Deferred 2026-09-15 from
+      the same branch. Sessions left mid-turn by a stopped process still hang forever — the
+      most common way a real run dies. Three hazards to solve first: the "no live execution"
+      check is vacuous at startup (the registries are empty dicts), the `updated_at` staleness
+      comparison is timezone-unsafe (SQLite `CURRENT_TIMESTAMP` is naive UTC vs a local
+      `datetime.now()`), and the sweep's status write would fire the notifier inside
+      `lifespan`, where `get_session_executor()` caches a permanently broken executor
+      (`dependencies.py:222`). Prefer serializing/rate-limiting notifications over an
+      environment-conditional flag, so dev and prod behave the same.
+
 ## Backlog (someday / declined)
 Unscheduled — someday / maybe / declined ideas + tech debt.
 - **Warn before deleting a project with running agents.** A confirmation showing how many

@@ -46,6 +46,16 @@ type: plan
   explicitly out of scope (see backlog).
 
 ### Task 4: Migration — fix path uniqueness and backfill the existing orphans
+> **BLOCKED 2026-09-15 — do not attempt.** Alembic history is broken repo-wide: `alembic
+> heads` reports two heads (`20260305_0000`, `add_task_layer_20260308`) and `alembic current`
+> fails with "Can't locate revision identified by 'add_session_summary_20260308'" — the live
+> DB points at a revision whose `.py` exists only in commit `6b302e5` on the unmerged branch
+> `feat/session-memory-20260308`. No new migration can pick an unambiguous `down_revision`.
+> See the first open item in `docs/REVIEW.md`. Unblocks when migration history is repaired on
+> its own branch and merged. Root cause of the defect this task fixes is now known:
+> `20260121_1132_fix_projects_path_unique_constraint.py` set only `postgresql_where`, which
+> SQLite ignores — the fix is to set `sqlite_where` too.
+
 - **Files:**
   - `backend/alembic/versions/<rev>_fix_project_soft_delete.py` (create)
   - `backend/app/infrastructure/database/models.py` (modify)
@@ -68,6 +78,10 @@ type: plan
     stamping them deleted; the migration cannot interrupt anything.
 
 ### Task 5: Restore endpoint
+> **BLOCKED 2026-09-15 — do not attempt.** Depends on Task 4, which is blocked. R4 (refusing
+> a restore whose path is taken) is only reachable once the migration frees the path on
+> delete, so building restore now would ship a rule that cannot occur.
+
 - **Files:**
   - `backend/app/api/routes/projects.py` (modify)
   - `backend/app/application/services/project_service.py` (modify)
