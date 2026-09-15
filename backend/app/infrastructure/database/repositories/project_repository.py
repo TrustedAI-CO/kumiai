@@ -1,6 +1,8 @@
 """SQLAlchemy implementation of ProjectRepository."""
 
-from datetime import datetime
+# feature: WORK-01
+
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -108,7 +110,7 @@ class ProjectRepositoryImpl(BaseRepositoryImpl[ProjectEntity], ProjectRepository
             if model is None:
                 raise EntityNotFound(f"Project {project_id} not found")
 
-            model.deleted_at = datetime.utcnow()
+            model.deleted_at = datetime.now(timezone.utc)
             await self._session.flush()
         except EntityNotFound:
             raise
