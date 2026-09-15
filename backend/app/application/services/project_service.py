@@ -359,6 +359,8 @@ class ProjectService:
         if not exists:
             raise ProjectNotFoundError(f"Project {project_id} not found")
 
+        interrupted, interrupt_failures = await self._stop_running_agents(project_id)
+
         deleted_at = datetime.now(timezone.utc)
         task_count = await self._task_repo.soft_delete_by_project(
             project_id, deleted_at
@@ -372,5 +374,63 @@ class ProjectService:
             project_id=str(project_id),
             task_count=task_count,
             session_count=session_count,
+            interrupted_count=len(interrupted),
+            interrupt_failure_count=len(interrupt_failures),
             deleted_at=deleted_at.isoformat(),
         )
+
+    async def _stop_running_agents(
+        self, project_id: UUID
+    ) -> tuple[List[UUID], List[UUID]]:
+        """
+        Interrupt every agent still running for a project.
+
+        Called BEFORE the project and its children are hidden. The ordering is
+        deliberate and asymmetric: stopping an agent is irreversible, hiding a project
+        is not. An agent left running against a deleted project keeps executing, writing
+        files and spending budget where nobody is looking; an agent stopped by a delete
+        that then fails is merely stopped, and is visible and restartable.
+
+        A failure to interrupt never aborts the deletion (R4) — the session may already
+        be gone or unresponsive, and refusing to delete the project because of it would
+        leave the caller with a project that cannot be removed.
+
+        Returns:
+            (interrupted session ids, session ids that could not be interrupted)
+        """
+        # Imported lazily to avoid a circular import between the API and infrastructure
+        # layers; this mirrors SessionStatusManager and the MCP tools. See the backlog
+        # item "Break the executor circular dependency".
+        from app.api.dependencies import get_session_executor
+
+        interrupted: List[UUID] = []
+        failures: List[UUID] = []
+
+        try:
+            sessions = await self._session_repo.get_by_project_id(project_id)
+            executor = get_session_executor()
+        except Exception as e:
+            # Nothing has been mutated yet, so the deletion can still proceed.
+            logger.warning(
+                "project_delete_agent_lookup_failed",
+                project_id=str(project_id),
+                error=str(e),
+            )
+            return interrupted, failures
+
+        for session in sessions:
+            if not executor.is_processing(session.id):
+                continue
+            try:
+                await executor.interrupt(session.id)
+                interrupted.append(session.id)
+            except Exception as e:
+                failures.append(session.id)
+                logger.warning(
+                    "project_delete_interrupt_failed",
+                    project_id=str(project_id),
+                    session_id=str(session.id),
+                    error=str(e),
+                )
+
+        return interrupted, failures

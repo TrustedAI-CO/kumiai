@@ -1,6 +1,6 @@
 """Unit tests for project deletion cascade (WORK-01, with mocked repositories)."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -110,6 +110,150 @@ class TestProjectDeleteCascade:
         project_service._session_repo.soft_delete_by_project.return_value = 0
 
         await project_service.delete_project(project_id)
+
+
+class TestProjectDeleteStopsRunningAgents:
+    """Live agents are stopped before the project is hidden (R3, R4)."""
+
+    @staticmethod
+    def _session(session_id):
+        session = Mock()
+        session.id = session_id
+        return session
+
+    @staticmethod
+    def _patch_executor(monkeypatch, executor):
+        """Stub the lazily-imported get_session_executor used by the service."""
+        import app.api.dependencies as dependencies
+
+        monkeypatch.setattr(dependencies, "get_session_executor", lambda: executor)
+
+    # spec: SPEC-work-project-delete-cascade R3
+    async def test_running_agents_are_interrupted(self, project_service, monkeypatch):
+        """Agents still running for the project are stopped."""
+        running_id, idle_id = uuid4(), uuid4()
+
+        executor = Mock()
+        executor.is_processing.side_effect = lambda sid: sid == running_id
+        executor.interrupt = AsyncMock()
+        self._patch_executor(monkeypatch, executor)
+
+        project_service._project_repo.exists.return_value = True
+        project_service._session_repo.get_by_project_id.return_value = [
+            self._session(running_id),
+            self._session(idle_id),
+        ]
+        project_service._task_repo.soft_delete_by_project.return_value = 0
+        project_service._session_repo.soft_delete_by_project.return_value = 2
+
+        await project_service.delete_project(uuid4())
+
+        executor.interrupt.assert_awaited_once_with(running_id)
+
+    # spec: SPEC-work-project-delete-cascade R3
+    async def test_agents_are_interrupted_before_the_project_is_hidden(
+        self, project_service, monkeypatch
+    ):
+        """The interrupt happens before any row is stamped deleted."""
+        running_id = uuid4()
+        order = []
+
+        executor = Mock()
+        executor.is_processing.return_value = True
+        executor.interrupt = AsyncMock(
+            side_effect=lambda sid: order.append("interrupt")
+        )
+        self._patch_executor(monkeypatch, executor)
+
+        project_service._project_repo.exists.return_value = True
+        project_service._session_repo.get_by_project_id.return_value = [
+            self._session(running_id)
+        ]
+        project_service._task_repo.soft_delete_by_project.side_effect = (
+            lambda *a: order.append("delete_tasks") or 0
+        )
+        project_service._session_repo.soft_delete_by_project.side_effect = (
+            lambda *a: order.append("delete_sessions") or 0
+        )
+        project_service._project_repo.delete.side_effect = lambda *a: order.append(
+            "delete_project"
+        )
+
+        await project_service.delete_project(uuid4())
+
+        assert order[0] == "interrupt", f"interrupt must come first, got {order}"
+        assert "delete_project" in order
+
+    # spec: SPEC-work-project-delete-cascade R4
+    async def test_failed_interrupt_does_not_abort_the_delete(
+        self, project_service, monkeypatch
+    ):
+        """An agent that cannot be stopped does not leave a half-deleted project."""
+        executor = Mock()
+        executor.is_processing.return_value = True
+        executor.interrupt = AsyncMock(side_effect=RuntimeError("session is gone"))
+        self._patch_executor(monkeypatch, executor)
+
+        project_service._project_repo.exists.return_value = True
+        project_service._session_repo.get_by_project_id.return_value = [
+            self._session(uuid4())
+        ]
+        project_service._task_repo.soft_delete_by_project.return_value = 0
+        project_service._session_repo.soft_delete_by_project.return_value = 1
+
+        await project_service.delete_project(uuid4())
+
+        project_service._project_repo.delete.assert_awaited_once()
+
+    # spec: SPEC-work-project-delete-cascade R4
+    async def test_one_failed_interrupt_does_not_stop_the_others(
+        self, project_service, monkeypatch
+    ):
+        """Interrupt failures are isolated per session."""
+        bad_id, good_id = uuid4(), uuid4()
+
+        async def _interrupt(sid):
+            if sid == bad_id:
+                raise RuntimeError("unresponsive")
+
+        executor = Mock()
+        executor.is_processing.return_value = True
+        executor.interrupt = AsyncMock(side_effect=_interrupt)
+        self._patch_executor(monkeypatch, executor)
+
+        project_service._project_repo.exists.return_value = True
+        project_service._session_repo.get_by_project_id.return_value = [
+            self._session(bad_id),
+            self._session(good_id),
+        ]
+        project_service._task_repo.soft_delete_by_project.return_value = 0
+        project_service._session_repo.soft_delete_by_project.return_value = 2
+
+        await project_service.delete_project(uuid4())
+
+        assert executor.interrupt.await_count == 2
+        project_service._project_repo.delete.assert_awaited_once()
+
+    # spec: SPEC-work-project-delete-cascade R4
+    async def test_executor_unavailable_does_not_abort_the_delete(
+        self, project_service, monkeypatch
+    ):
+        """If the executor cannot be reached at all, the delete still completes."""
+        import app.api.dependencies as dependencies
+
+        def _boom():
+            raise RuntimeError("executor not wired")
+
+        monkeypatch.setattr(dependencies, "get_session_executor", _boom)
+
+        project_service._project_repo.exists.return_value = True
+        project_service._session_repo.get_by_project_id.return_value = []
+        project_service._task_repo.soft_delete_by_project.return_value = 0
+        project_service._session_repo.soft_delete_by_project.return_value = 0
+
+        await project_service.delete_project(uuid4())
+
+        project_service._project_repo.delete.assert_awaited_once()
 
 
 class TestSoftDeleteByProjectQuery:
