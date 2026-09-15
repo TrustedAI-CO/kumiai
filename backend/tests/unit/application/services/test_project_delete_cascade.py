@@ -1,5 +1,6 @@
 """Unit tests for project deletion cascade (WORK-01, with mocked repositories)."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -27,7 +28,7 @@ class TestProjectDeleteCascade:
     async def test_delete_cascades_to_tasks_and_sessions(self, project_service):
         """A project's live tasks and sessions are deleted along with it."""
         project_id = uuid4()
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._task_repo.soft_delete_by_project.return_value = 2
         project_service._session_repo.soft_delete_by_project.return_value = 3
 
@@ -50,7 +51,7 @@ class TestProjectDeleteCascade:
     async def test_delete_uses_one_shared_timestamp(self, project_service):
         """Project and children are stamped with the identical timestamp."""
         project_id = uuid4()
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._task_repo.soft_delete_by_project.return_value = 1
         project_service._session_repo.soft_delete_by_project.return_value = 1
 
@@ -71,7 +72,7 @@ class TestProjectDeleteCascade:
     async def test_delete_with_no_children_succeeds(self, project_service):
         """A project with no tasks or sessions deletes cleanly."""
         project_id = uuid4()
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._task_repo.soft_delete_by_project.return_value = 0
         project_service._session_repo.soft_delete_by_project.return_value = 0
 
@@ -82,7 +83,7 @@ class TestProjectDeleteCascade:
     # spec: SPEC-work-project-delete-cascade R1
     async def test_delete_missing_project_raises(self, project_service):
         """Deleting an unknown project raises and touches no child."""
-        project_service._project_repo.exists.return_value = False
+        project_service._project_repo.get_deletion_info.return_value = None
 
         with pytest.raises(ProjectNotFoundError):
             await project_service.delete_project(uuid4())
@@ -90,6 +91,24 @@ class TestProjectDeleteCascade:
         project_service._task_repo.soft_delete_by_project.assert_not_awaited()
         project_service._session_repo.soft_delete_by_project.assert_not_awaited()
         project_service._project_repo.delete.assert_not_awaited()
+
+    # spec: SPEC-work-project-delete-cascade R2
+    async def test_deleting_an_already_deleted_project_is_a_noop(self, project_service):
+        """
+        A second delete must not re-stamp the project.
+
+        Re-stamping moves the project's deleted_at while its children — already deleted,
+        so skipped by the bulk update — keep the original. Restore keys on the project's
+        stamp, so a second DELETE would silently make the first one unrecoverable.
+        """
+        earlier = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        project_service._project_repo.get_deletion_info.return_value = (earlier, "/p")
+
+        await project_service.delete_project(uuid4())
+
+        project_service._project_repo.delete.assert_not_awaited()
+        project_service._task_repo.soft_delete_by_project.assert_not_awaited()
+        project_service._session_repo.soft_delete_by_project.assert_not_awaited()
 
     # spec: SPEC-work-project-delete-cascade R5
     async def test_delete_touches_no_files_on_disk(self, project_service, monkeypatch):
@@ -105,7 +124,7 @@ class TestProjectDeleteCascade:
         monkeypatch.setattr(os, "unlink", _fail)
 
         project_id = uuid4()
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._task_repo.soft_delete_by_project.return_value = 0
         project_service._session_repo.soft_delete_by_project.return_value = 0
 
@@ -138,7 +157,7 @@ class TestProjectDeleteStopsRunningAgents:
         executor.interrupt = AsyncMock()
         self._patch_executor(monkeypatch, executor)
 
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._session_repo.get_by_project_id.return_value = [
             self._session(running_id),
             self._session(idle_id),
@@ -165,7 +184,7 @@ class TestProjectDeleteStopsRunningAgents:
         )
         self._patch_executor(monkeypatch, executor)
 
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._session_repo.get_by_project_id.return_value = [
             self._session(running_id)
         ]
@@ -194,7 +213,7 @@ class TestProjectDeleteStopsRunningAgents:
         executor.interrupt = AsyncMock(side_effect=RuntimeError("session is gone"))
         self._patch_executor(monkeypatch, executor)
 
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._session_repo.get_by_project_id.return_value = [
             self._session(uuid4())
         ]
@@ -221,7 +240,7 @@ class TestProjectDeleteStopsRunningAgents:
         executor.interrupt = AsyncMock(side_effect=_interrupt)
         self._patch_executor(monkeypatch, executor)
 
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._session_repo.get_by_project_id.return_value = [
             self._session(bad_id),
             self._session(good_id),
@@ -246,7 +265,7 @@ class TestProjectDeleteStopsRunningAgents:
 
         monkeypatch.setattr(dependencies, "get_session_executor", _boom)
 
-        project_service._project_repo.exists.return_value = True
+        project_service._project_repo.get_deletion_info.return_value = (None, "/p")
         project_service._session_repo.get_by_project_id.return_value = []
         project_service._task_repo.soft_delete_by_project.return_value = 0
         project_service._session_repo.soft_delete_by_project.return_value = 0

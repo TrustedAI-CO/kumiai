@@ -354,12 +354,34 @@ class ProjectService:
         Args:
             project_id: Project UUID
 
+        Deleting an already-deleted project is a no-op, deliberately. Re-stamping it
+        would move the project's deleted_at to a new moment while its children — no
+        longer live, so skipped by the bulk update — kept the original. Restore matches
+        on the project's stamp, so the children would never come back: a second DELETE
+        would quietly make the first one unrecoverable.
+
+        Args:
+            project_id: Project UUID
+
         Raises:
             ProjectNotFoundError: If project doesn't exist
         """
-        exists = await self._project_repo.exists(project_id)
-        if not exists:
+        info = await self._project_repo.get_deletion_info(project_id)
+        if info is None:
             raise ProjectNotFoundError(f"Project {project_id} not found")
+
+        already_deleted_at, _ = info
+        if already_deleted_at is not None:
+            logger.info(
+                "project_delete_noop_already_deleted",
+                project_id=str(project_id),
+                deleted_at=(
+                    already_deleted_at.isoformat()
+                    if hasattr(already_deleted_at, "isoformat")
+                    else str(already_deleted_at)
+                ),
+            )
+            return
 
         interrupted, interrupt_failures = await self._stop_running_agents(project_id)
 
