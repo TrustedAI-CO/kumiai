@@ -114,12 +114,20 @@ class Project(Base):
             postgresql_where="deleted_at IS NULL",
         ),
         Index("idx_projects_deleted_at", "deleted_at"),
-        # Partial unique index: path must be unique only for non-deleted projects
+        # Partial unique index: path must be unique only for non-deleted projects.
+        #
+        # sqlite_where is as load-bearing as postgresql_where. Each dialect kwarg is
+        # honoured ONLY by its own dialect, and a predicate the dialect ignores does not
+        # warn — SQLite silently built an unconditional UNIQUE index, so a soft-deleted
+        # project held its path forever and recreating a project there raised
+        # IntegrityError with no way to clear it from the UI. SQLite is the default
+        # deployment, so the guard that mattered most was the one not written.
         Index(
             "idx_projects_path_unique",
             "path",
             unique=True,
-            postgresql_where="deleted_at IS NULL",
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
     )
 
