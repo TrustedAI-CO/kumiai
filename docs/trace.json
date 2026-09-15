@@ -433,23 +433,23 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 26
+                  "line": 27
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 49
+                  "line": 50
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 70
+                  "line": 71
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 82
+                  "line": 83
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 317
+                  "line": 336
                 }
               ]
             },
@@ -464,7 +464,11 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 262
+                  "line": 95
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 281
                 }
               ]
             },
@@ -479,11 +483,11 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 131
+                  "line": 150
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 153
+                  "line": 172
                 }
               ]
             },
@@ -498,15 +502,15 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 187
+                  "line": 206
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 208
+                  "line": 227
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 237
+                  "line": 256
                 }
               ]
             },
@@ -521,7 +525,7 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
-                  "line": 94
+                  "line": 113
                 }
               ]
             },
@@ -581,7 +585,7 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 49
+                  "line": 50
                 }
               ]
             },
@@ -596,15 +600,15 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 61
+                  "line": 62
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 132
+                  "line": 171
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 195
+                  "line": 234
                 }
               ]
             },
@@ -619,11 +623,11 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 79
+                  "line": 80
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 91
+                  "line": 92
                 }
               ]
             },
@@ -638,11 +642,19 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 101
+                  "line": 102
                 },
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 114
+                  "line": 115
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 133
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 154
                 }
               ]
             },
@@ -657,7 +669,7 @@
               "tests": [
                 {
                   "file": "backend/tests/unit/application/services/test_project_restore.py",
-                  "line": 174
+                  "line": 213
                 }
               ]
             }

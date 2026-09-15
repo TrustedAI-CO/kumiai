@@ -11,6 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT License
 - Community contribution guidelines
 - Session error recovery: Allow input and message sending even when sessions are in ERROR state
+- Deleting a project now hides its tasks and sessions with it, and stops the agents it
+  had running before the project disappears — WORK-01
+- Restore a deleted project and the children its deletion hid, via
+  `POST /api/v1/projects/{id}/restore` — WORK-02
+- Document-driven docs tree (`docs/intent.md`, `architecture.md`, `functions.md`,
+  behavioural specs) and `scripts/trace.py`, which computes spec-to-test coverage from
+  `# feature:` and `# spec:` code tags
+
+### Fixed
+- A project's agents kept running after it was deleted, still executing, writing files
+  and spending tokens against a project the user believed was gone — WORK-01
+- A soft-deleted project reserved its filesystem path forever, so creating a project at
+  that path failed with an unfixable error. The unique index was declared with only
+  `postgresql_where`, which SQLite silently ignores — WORK-01
+- Tasks and sessions orphaned by earlier deletions are adopted by their parent's deletion
+  timestamp (migration `fix_project_soft_delete_20260915`) — WORK-01
+- Deleting an already-deleted project no longer re-stamps it, which had silently made the
+  original deletion unrecoverable — WORK-01
+- Alembic migration history was unusable repo-wide: two revision files existed only on an
+  unmerged branch, and a placeholder-id collision from January closed a 13-revision cycle
+  that made `alembic history` hang
+- Async tests were silently skipped: `pytest.ini` had its `[coverage:*]` sections
+  mid-file, so `asyncio_mode = auto` was parsed into the wrong section
+- The test suite pointed `drop_all` at the developer's live database on SQLite; it now
+  uses a throwaway file
+- `scripts/trace.py` pruned `backend/` and `frontend/` from scanning, reporting every
+  feature as uncovered while exiting successfully
 
 ## [0.1.0] - 2026-01-26
 
