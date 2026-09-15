@@ -12,6 +12,7 @@ from app.application.services.exceptions import (
     ProjectPathConflictError,
 )
 from app.application.services.project_service import ProjectService
+from app.core.exceptions import DatabaseError
 from app.domain.entities import Project
 
 STAMP = datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -124,6 +125,44 @@ class TestProjectRestore:
         args = project_service._project_repo.is_path_taken.await_args.args
         assert args[0] == PATH
         assert args[1] == project_id
+
+
+class TestRestoreRaceOnPath:
+    """The unique index is the real arbiter when the check-then-write race is lost."""
+
+    # spec: SPEC-work-project-restore R4
+    async def test_losing_the_path_race_is_a_conflict_not_a_server_error(
+        self, project_service
+    ):
+        """
+        A concurrent restore that slips past is_path_taken must still read as a conflict.
+
+        is_path_taken is a read followed by a write, so another restore can take the
+        path in between. The partial unique index rejects the loser. That is the caller
+        losing a race, not the server breaking, so it must not surface as a 500 telling
+        them to retry something that cannot succeed.
+        """
+        _deleted(project_service)
+        project_service._project_repo.restore.side_effect = DatabaseError(
+            "Failed to restore project: UNIQUE constraint failed: "
+            "idx_projects_path_unique"
+        )
+
+        with pytest.raises(ProjectPathConflictError):
+            await project_service.restore_project(uuid4())
+
+    # spec: SPEC-work-project-restore R4
+    async def test_an_unrelated_database_failure_still_propagates(
+        self, project_service
+    ):
+        """Only the path index maps to a conflict; real faults stay faults."""
+        _deleted(project_service)
+        project_service._project_repo.restore.side_effect = DatabaseError(
+            "disk I/O error"
+        )
+
+        with pytest.raises(DatabaseError):
+            await project_service.restore_project(uuid4())
 
 
 class TestRestoreByProjectQuery:

@@ -21,6 +21,7 @@ from app.application.services.exceptions import (
     ProjectPathConflictError,
 )
 from app.core.config import settings
+from app.core.exceptions import DatabaseError
 from app.core.logging import get_logger
 from app.domain.config.templates import get_project_template
 from app.domain.entities import Project
@@ -32,6 +33,19 @@ from app.domain.repositories import (
 )
 
 logger = get_logger(__name__)
+
+
+def _is_path_uniqueness_violation(error: Exception) -> bool:
+    """
+    Whether a database error is the projects.path unique index rejecting a write.
+
+    The repositories wrap driver errors in DatabaseError, so the original exception
+    type is gone by the time it reaches the service and the index name is the only
+    reliable signal left. Both SQLite and PostgreSQL name the offending index in their
+    message, so matching on it is dialect-agnostic and stays narrow — any other database
+    failure keeps propagating as a 500, which is what a genuine fault deserves.
+    """
+    return "idx_projects_path_unique" in str(error)
 
 
 class ProjectService:
@@ -439,7 +453,21 @@ class ProjectService:
         session_count = await self._session_repo.restore_by_project(
             project_id, deleted_at
         )
-        await self._project_repo.restore(project_id)
+        try:
+            await self._project_repo.restore(project_id)
+        except DatabaseError as e:
+            # The is_path_taken check above is a read followed by a write, so a
+            # concurrent restore onto the same freed path can slip between them. The
+            # partial unique index is the real arbiter and rejects the loser. Surface
+            # that as the same conflict the check would have reported — losing the race
+            # is not a server fault, and a 500 would tell the caller to retry a request
+            # that will never succeed until the path is freed.
+            if _is_path_uniqueness_violation(e):
+                raise ProjectPathConflictError(
+                    f"Cannot restore project {project_id}: another project took "
+                    f"{path} concurrently."
+                ) from e
+            raise
 
         logger.info(
             "project_restored",
