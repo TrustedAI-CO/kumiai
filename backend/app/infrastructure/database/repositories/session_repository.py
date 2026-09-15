@@ -1,10 +1,12 @@
 """SQLAlchemy implementation of SessionRepository."""
 
+# feature: WORK-01
+
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -196,6 +198,27 @@ class SessionRepositoryImpl(BaseRepositoryImpl[SessionEntity], SessionRepository
             raise
         except Exception as e:
             raise DatabaseError(f"Failed to delete session {session_id}: {e}") from e
+
+    async def soft_delete_by_project(
+        self, project_id: UUID, deleted_at: datetime
+    ) -> int:
+        """Soft-delete all live sessions for a project."""
+        try:
+            stmt = (
+                update(Session)
+                .where(
+                    Session.project_id == project_id,
+                    Session.deleted_at.is_(None),
+                )
+                .values(deleted_at=deleted_at)
+            )
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return result.rowcount or 0
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to soft-delete sessions for project {project_id}: {e}"
+            ) from e
 
     async def exists(self, session_id: UUID) -> bool:
         """Check if session exists (including soft-deleted)."""

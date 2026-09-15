@@ -1,6 +1,9 @@
 """Task repository interface."""
 
+# feature: WORK-01
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -28,4 +31,10 @@ class TaskRepository(ABC):
 
     @abstractmethod
     async def delete(self, task_id: UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def soft_delete_by_project(
+        self, project_id: UUID, deleted_at: datetime
+    ) -> int:
         pass

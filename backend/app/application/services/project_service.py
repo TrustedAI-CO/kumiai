@@ -1,8 +1,10 @@
 """Project service - application layer use cases."""
 
+# feature: WORK-01
+
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -17,13 +19,17 @@ from app.application.services.exceptions import (
     ProjectNotFoundError,
 )
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.domain.config.templates import get_project_template
 from app.domain.entities import Project
 from app.domain.repositories import (
     AgentRepository,
     ProjectRepository,
     SessionRepository,
+    TaskRepository,
 )
+
+logger = get_logger(__name__)
 
 
 class ProjectService:
@@ -41,11 +47,13 @@ class ProjectService:
         self,
         project_repo: ProjectRepository,
         session_repo: SessionRepository,
+        task_repo: TaskRepository,
         agent_repo: AgentRepository,
     ):
         """Initialize service with repositories."""
         self._project_repo = project_repo
         self._session_repo = session_repo
+        self._task_repo = task_repo
         self._agent_repo = agent_repo
 
     def _sanitize_project_name(self, name: str, add_suffix: bool = True) -> str:
@@ -351,4 +359,18 @@ class ProjectService:
         if not exists:
             raise ProjectNotFoundError(f"Project {project_id} not found")
 
-        await self._project_repo.delete(project_id)
+        deleted_at = datetime.now(timezone.utc)
+        task_count = await self._task_repo.soft_delete_by_project(
+            project_id, deleted_at
+        )
+        session_count = await self._session_repo.soft_delete_by_project(
+            project_id, deleted_at
+        )
+        await self._project_repo.delete(project_id, deleted_at)
+        logger.info(
+            "project_soft_deleted",
+            project_id=str(project_id),
+            task_count=task_count,
+            session_count=session_count,
+            deleted_at=deleted_at.isoformat(),
+        )

@@ -100,7 +100,9 @@ class ProjectRepositoryImpl(BaseRepositoryImpl[ProjectEntity], ProjectRepository
         except Exception as e:
             raise DatabaseError(f"Failed to update project {project.id}: {e}") from e
 
-    async def delete(self, project_id: UUID) -> None:
+    async def delete(
+        self, project_id: UUID, deleted_at: datetime | None = None
+    ) -> None:
         """Soft-delete a project."""
         try:
             stmt = select(Project).where(Project.id == project_id)
@@ -110,7 +112,7 @@ class ProjectRepositoryImpl(BaseRepositoryImpl[ProjectEntity], ProjectRepository
             if model is None:
                 raise EntityNotFound(f"Project {project_id} not found")
 
-            model.deleted_at = datetime.now(timezone.utc)
+            model.deleted_at = deleted_at or datetime.now(timezone.utc)
             await self._session.flush()
         except EntityNotFound:
             raise

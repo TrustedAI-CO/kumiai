@@ -1,6 +1,9 @@
 """Project repository interface."""
 
+# feature: WORK-01
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -83,7 +86,9 @@ class ProjectRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, project_id: UUID) -> None:
+    async def delete(
+        self, project_id: UUID, deleted_at: datetime | None = None
+    ) -> None:
         """
         Soft-delete a project.
 
@@ -92,6 +97,7 @@ class ProjectRepository(ABC):
 
         Args:
             project_id: UUID of project to delete.
+            deleted_at: Optional timestamp to use for the soft delete.
 
         Raises:
             NotFoundError: If project with given ID doesn't exist.
