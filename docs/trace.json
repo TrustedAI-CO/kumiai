@@ -1,0 +1,671 @@
+{
+  "generated_by": "trace.py",
+  "stats": {
+    "total": 5,
+    "deferred": 0,
+    "must": 4,
+    "should": 1,
+    "could": 0,
+    "green": 2,
+    "red": 3,
+    "gray": 0,
+    "proven": 2,
+    "pct": 40,
+    "must_proven": 1,
+    "must_total": 4,
+    "rows_cov": 11,
+    "rows_tot": 28,
+    "rows_pct": 39
+  },
+  "audit": {
+    "ok": true,
+    "issues": [],
+    "warnings": []
+  },
+  "modules": [
+    {
+      "module": "project-workspace",
+      "proven": 2,
+      "total": 2,
+      "depends_on": [
+        "persistence"
+      ],
+      "features": [
+        "WORK-01",
+        "WORK-02"
+      ]
+    },
+    {
+      "module": "session-coordination",
+      "proven": 0,
+      "total": 3,
+      "depends_on": [
+        "agent-runtime",
+        "persistence"
+      ],
+      "features": [
+        "COORD-01",
+        "COORD-02",
+        "COORD-03"
+      ]
+    }
+  ],
+  "module_graph": [
+    {
+      "module": "agent-catalog",
+      "depends_on": [
+        "persistence"
+      ]
+    },
+    {
+      "module": "agent-runtime",
+      "depends_on": [
+        "persistence"
+      ]
+    },
+    {
+      "module": "http-api",
+      "depends_on": [
+        "session-coordination",
+        "project-workspace",
+        "agent-catalog"
+      ]
+    },
+    {
+      "module": "mcp-tools",
+      "depends_on": [
+        "session-coordination",
+        "project-workspace",
+        "agent-catalog"
+      ]
+    },
+    {
+      "module": "persistence",
+      "depends_on": []
+    },
+    {
+      "module": "project-workspace",
+      "depends_on": [
+        "persistence"
+      ]
+    },
+    {
+      "module": "session-coordination",
+      "depends_on": [
+        "agent-runtime",
+        "persistence"
+      ]
+    },
+    {
+      "module": "web-ui",
+      "depends_on": [
+        "http-api"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "COORD-01",
+      "name": "spawn records parent",
+      "module": "session-coordination",
+      "intent": "G5",
+      "importance": "must",
+      "scope": "active",
+      "state": "red",
+      "rows_cov": 0,
+      "rows_total": 3,
+      "files": [],
+      "stale": false,
+      "specs": [
+        {
+          "sid": "SPEC-coord-spawn-parent-link",
+          "file": "docs/specs/coord-spawn-parent-link.md",
+          "status": "approved",
+          "rows_total": 3,
+          "rows_cov": 0,
+          "rows_bare": [
+            "R1",
+            "R2",
+            "R3"
+          ],
+          "rows_detail": [
+            {
+              "id": "R1",
+              "cells": [
+                "a session spawns a specialist",
+                "the child session is created",
+                "the child records the spawning session as its parent"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R2",
+              "cells": [
+                "the spawning session's identity is unavailable",
+                "a specialist is spawned",
+                "the child is created with no parent, rather than the spawn failing"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R3",
+              "cells": [
+                "a session is created other than by being spawned",
+                "the session is created",
+                "it has no parent and is treated as a root"
+              ],
+              "covered": false,
+              "tests": []
+            }
+          ],
+          "stale": false
+        }
+      ]
+    },
+    {
+      "id": "COORD-02",
+      "name": "turn-end outcome recording",
+      "module": "session-coordination",
+      "intent": "G5",
+      "importance": "must",
+      "scope": "active",
+      "state": "red",
+      "rows_cov": 0,
+      "rows_total": 7,
+      "files": [],
+      "stale": false,
+      "specs": [
+        {
+          "sid": "SPEC-coord-turn-end-outcome",
+          "file": "docs/specs/coord-turn-end-outcome.md",
+          "status": "approved",
+          "rows_total": 7,
+          "rows_cov": 0,
+          "rows_bare": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "rows_detail": [
+            {
+              "id": "R1",
+              "cells": [
+                "a session finishes responding with nothing left queued for it",
+                "the turn ends",
+                "the session's recorded outcome is idle"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R2",
+              "cells": [
+                "a session's turn ends because its execution failed",
+                "the turn ends",
+                "the recorded outcome is error and carries the failure reason"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R3",
+              "cells": [
+                "a session's turn ends by interruption or a process termination signal",
+                "the turn ends",
+                "the recorded outcome is interrupted"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R4",
+              "cells": [
+                "a session was left mid-turn by a process that stopped",
+                "the service starts again",
+                "the session's outcome is recorded as interrupted rather than left in progress"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R5",
+              "cells": [
+                "several components observe the same turn ending",
+                "the turn ends",
+                "exactly one outcome is recorded for that turn — the first observed, except that a failure seen before the parent has been notified replaces a recorded idle"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R6",
+              "cells": [
+                "a transport failure occurs while relaying a running turn to a client",
+                "the failure occurs",
+                "the session's own outcome is unchanged and the transport failure is not recorded as it"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R7",
+              "cells": [
+                "a session's turn ends because it is waiting on a human",
+                "the turn ends",
+                "no outcome is recorded, because the work is neither finished nor failed"
+              ],
+              "covered": false,
+              "tests": []
+            }
+          ],
+          "stale": false
+        }
+      ]
+    },
+    {
+      "id": "COORD-03",
+      "name": "parent turn-end notification",
+      "module": "session-coordination",
+      "intent": "G5",
+      "importance": "must",
+      "scope": "active",
+      "state": "red",
+      "rows_cov": 0,
+      "rows_total": 7,
+      "files": [],
+      "stale": false,
+      "specs": [
+        {
+          "sid": "SPEC-coord-parent-notification",
+          "file": "docs/specs/coord-parent-notification.md",
+          "status": "approved",
+          "rows_total": 7,
+          "rows_cov": 0,
+          "rows_bare": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "rows_detail": [
+            {
+              "id": "R1",
+              "cells": [
+                "a session has a resolvable parent, did not report to it during the turn, and R3's cap has not been reached",
+                "an outcome is recorded",
+                "the parent receives exactly one message naming the child, its task, and the outcome — and the child's recorded state already reflects that outcome"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R2",
+              "cells": [
+                "a session already reported to its parent during the turn",
+                "an outcome is recorded",
+                "the parent receives no further message about that turn"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R3",
+              "cells": [
+                "consecutive runtime notifications have gone to the same parent with no human or third-party message breaking the chain",
+                "an outcome is recorded",
+                "notification stops until the chain is broken"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R4",
+              "cells": [
+                "a session has no parent, its parent id resolves to no session, or its parent is deleted or cancelled",
+                "an outcome is recorded",
+                "no notification is delivered"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R5",
+              "cells": [
+                "a parent receives a runtime notification",
+                "the agent reads it",
+                "the message carries a runtime sender identity distinct from any session's, so it is not mistaken for another agent's"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R7",
+              "cells": [
+                "delivering a notification fails",
+                "an outcome is recorded",
+                "the recorded outcome is unaffected"
+              ],
+              "covered": false,
+              "tests": []
+            },
+            {
+              "id": "R8",
+              "cells": [
+                "a session's parent is itself working when the child's turn ends",
+                "an outcome is recorded",
+                "the parent's current turn is not interrupted, and it receives the message on its next turn"
+              ],
+              "covered": false,
+              "tests": []
+            }
+          ],
+          "stale": false
+        }
+      ]
+    },
+    {
+      "id": "WORK-01",
+      "name": "project delete cascades",
+      "module": "project-workspace",
+      "intent": "G3",
+      "importance": "must",
+      "scope": "active",
+      "state": "green",
+      "rows_cov": 6,
+      "rows_total": 6,
+      "files": [
+        {
+          "file": "backend/app/application/services/project_service.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/infrastructure/database/repositories/session_repository.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/infrastructure/database/repositories/project_repository.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/infrastructure/database/repositories/task_repository.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/domain/repositories/session_repository.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/domain/repositories/project_repository.py",
+          "line": 3
+        },
+        {
+          "file": "backend/app/domain/repositories/task_repository.py",
+          "line": 3
+        }
+      ],
+      "stale": true,
+      "specs": [
+        {
+          "sid": "SPEC-work-project-delete-cascade",
+          "file": "docs/specs/work-project-delete-cascade.md",
+          "status": "approved",
+          "rows_total": 6,
+          "rows_cov": 6,
+          "rows_bare": [],
+          "rows_detail": [
+            {
+              "id": "R1",
+              "cells": [
+                "a project with tasks and sessions that are not deleted",
+                "the project is deleted",
+                "those tasks and sessions are deleted too, and stop appearing anywhere the project's own children would"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 26
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 49
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 70
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 82
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 317
+                }
+              ]
+            },
+            {
+              "id": "R2",
+              "cells": [
+                "a project whose task or session was already deleted earlier",
+                "the project is deleted",
+                "that child keeps the moment it was originally deleted, so it is not mistaken for one the project took with it"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 262
+                }
+              ]
+            },
+            {
+              "id": "R3",
+              "cells": [
+                "a project with agents currently running",
+                "the project is deleted",
+                "those agents are stopped before the project is hidden, and stop consuming budget"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 131
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 153
+                }
+              ]
+            },
+            {
+              "id": "R4",
+              "cells": [
+                "an agent cannot be stopped (already gone, unresponsive)",
+                "the project is deleted",
+                "the deletion still completes and the failure to stop is recorded, rather than leaving the project half-deleted"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 187
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 208
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 237
+                }
+              ]
+            },
+            {
+              "id": "R5",
+              "cells": [
+                "a project is deleted",
+                "the deletion completes",
+                "the project's files on disk are left exactly as they were"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_delete_cascade.py",
+                  "line": 94
+                }
+              ]
+            },
+            {
+              "id": "R6",
+              "cells": [
+                "a project was deleted",
+                "a new project is created at the same path",
+                "the new project is created, rather than being refused because a hidden project still holds that path"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/infrastructure/test_project_path_index.py",
+                  "line": 29
+                },
+                {
+                  "file": "backend/tests/unit/infrastructure/test_project_path_index.py",
+                  "line": 47
+                }
+              ]
+            }
+          ],
+          "stale": true
+        }
+      ]
+    },
+    {
+      "id": "WORK-02",
+      "name": "project restore",
+      "module": "project-workspace",
+      "intent": "G3",
+      "importance": "should",
+      "scope": "active",
+      "state": "green",
+      "rows_cov": 5,
+      "rows_total": 5,
+      "files": [],
+      "stale": false,
+      "specs": [
+        {
+          "sid": "SPEC-work-project-restore",
+          "file": "docs/specs/work-project-restore.md",
+          "status": "approved",
+          "rows_total": 5,
+          "rows_cov": 5,
+          "rows_bare": [],
+          "rows_detail": [
+            {
+              "id": "R1",
+              "cells": [
+                "a project that was deleted",
+                "it is restored",
+                "the project is visible again, along with the tasks and sessions that its deletion had hidden"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 49
+                }
+              ]
+            },
+            {
+              "id": "R2",
+              "cells": [
+                "a project whose child was already deleted before the project was",
+                "the project is restored",
+                "that child stays deleted"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 61
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 132
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 195
+                }
+              ]
+            },
+            {
+              "id": "R3",
+              "cells": [
+                "a project that was never deleted",
+                "it is restored",
+                "the request is rejected as invalid rather than silently changing anything"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 79
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 91
+                }
+              ]
+            },
+            {
+              "id": "R4",
+              "cells": [
+                "a project was deleted and another project now occupies its path",
+                "it is restored",
+                "the restore is refused with the conflict named, rather than producing two projects on one path"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 101
+                },
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 114
+                }
+              ]
+            },
+            {
+              "id": "R5",
+              "cells": [
+                "a project with sessions that were running when it was deleted",
+                "it is restored",
+                "those sessions come back stopped, not running"
+              ],
+              "covered": true,
+              "tests": [
+                {
+                  "file": "backend/tests/unit/application/services/test_project_restore.py",
+                  "line": 174
+                }
+              ]
+            }
+          ],
+          "stale": false
+        }
+      ]
+    }
+  ],
+  "deferred": []
+}
