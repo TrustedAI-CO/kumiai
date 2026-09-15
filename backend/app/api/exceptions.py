@@ -7,7 +7,9 @@ from app.application.services.exceptions import (
     AgentNotFoundError,
     InvalidSessionStateError,
     MessageNotFoundError,
+    ProjectNotDeletedError,
     ProjectNotFoundError,
+    ProjectPathConflictError,
     ServiceError,
     SessionNotFoundError,
     SkillNotFoundError,
@@ -198,6 +200,31 @@ async def domain_error_handler(request: Request, exc: DomainError) -> JSONRespon
     )
 
 
+async def conflict_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
+    """
+    Handle service errors caused by the current state of the data, not by a bug.
+
+    Restoring a project that is not deleted, or whose path another live project has
+    taken, is a legitimate request that cannot be satisfied right now. The generic
+    ServiceError fallback answers 500, which tells the caller the server broke when in
+    fact the caller needs to resolve a conflict.
+    """
+    logger.info(
+        "conflict_error",
+        path=request.url.path,
+        error=str(exc),
+        error_type=type(exc).__name__,
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "error": type(exc).__name__,
+            "message": str(exc),
+        },
+    )
+
+
 async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
     """Handle service layer errors."""
     logger.error(
@@ -292,6 +319,8 @@ EXCEPTION_HANDLERS = {
     SkillNotFoundError: service_not_found_error_handler,
     MessageNotFoundError: service_not_found_error_handler,
     InvalidSessionStateError: invalid_session_state_handler,
+    ProjectNotDeletedError: conflict_error_handler,
+    ProjectPathConflictError: conflict_error_handler,
     ServiceError: service_error_handler,
     # Infrastructure layer exceptions
     RepositoryError: validation_error_handler,  # Return 400 for repository errors

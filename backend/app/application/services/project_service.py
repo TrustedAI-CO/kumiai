@@ -16,7 +16,9 @@ from app.application.dtos.requests import (
     UpdateProjectRequest,
 )
 from app.application.services.exceptions import (
+    ProjectNotDeletedError,
     ProjectNotFoundError,
+    ProjectPathConflictError,
 )
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -378,6 +380,55 @@ class ProjectService:
             interrupt_failure_count=len(interrupt_failures),
             deleted_at=deleted_at.isoformat(),
         )
+
+    async def restore_project(self, project_id: UUID) -> ProjectDTO:
+        """
+        Restore a soft-deleted project and the children its deletion hid.
+
+        The exact mirror of delete_project. Only children carrying the project's own
+        deletion timestamp come back; a child deleted at any other moment was thrown
+        away separately and stays that way.
+
+        Agents are not restarted. They were stopped when the project was deleted and
+        stopping is not reversible — restoring conversation history is the promise,
+        resuming execution is not.
+
+        Raises:
+            ProjectNotFoundError: no such project
+            ProjectNotDeletedError: the project is not deleted
+            ProjectPathConflictError: a live project now occupies its path
+        """
+        info = await self._project_repo.get_deletion_info(project_id)
+        if info is None:
+            raise ProjectNotFoundError(f"Project {project_id} not found")
+
+        deleted_at, path = info
+        if deleted_at is None:
+            raise ProjectNotDeletedError(f"Project {project_id} is not deleted")
+
+        if await self._project_repo.is_path_taken(path, project_id):
+            raise ProjectPathConflictError(
+                f"Cannot restore project {project_id}: another project already uses "
+                f"{path}. Two projects on one path would give one working directory "
+                f"two agent populations."
+            )
+
+        task_count = await self._task_repo.restore_by_project(project_id, deleted_at)
+        session_count = await self._session_repo.restore_by_project(
+            project_id, deleted_at
+        )
+        await self._project_repo.restore(project_id)
+
+        logger.info(
+            "project_restored",
+            project_id=str(project_id),
+            task_count=task_count,
+            session_count=session_count,
+            deleted_at=deleted_at.isoformat(),
+        )
+
+        restored = await self._project_repo.get_by_id(project_id)
+        return ProjectDTO.from_entity(restored)
 
     async def _stop_running_agents(
         self, project_id: UUID

@@ -145,6 +145,11 @@ class SessionRepository(ABC):
         pass
 
     @abstractmethod
+    async def restore_by_project(self, project_id: UUID, deleted_at: datetime) -> int:
+        """Un-delete the sessions hidden by one project deletion."""
+        pass
+
+    @abstractmethod
     async def soft_delete_by_project(
         self, project_id: UUID, deleted_at: datetime
     ) -> int:

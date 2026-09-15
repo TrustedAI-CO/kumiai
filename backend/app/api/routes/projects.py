@@ -196,6 +196,38 @@ async def remove_pm(
     return await service.remove_pm(project_id)
 
 
+@router.post(
+    "/projects/{project_id}/restore",
+    response_model=ProjectDTO,
+    summary="Restore a deleted project",
+    description=(
+        "Undo a project deletion, bringing back the project and the tasks and sessions "
+        "its deletion hid. Children deleted separately stay deleted, and agents are not "
+        "restarted."
+    ),
+)
+async def restore_project(
+    project_id: UUID,
+    service: ProjectService = Depends(get_project_service),
+) -> ProjectDTO:
+    """
+    Restore a soft-deleted project.
+
+    Args:
+        project_id: Project UUID
+        service: Project service (injected)
+
+    Returns:
+        The restored project
+
+    Raises:
+        404: Project not found
+        409: Project is not deleted, or another live project now holds its path
+    """
+    logger.info("restore_project_request", project_id=str(project_id))
+    return await service.restore_project(project_id)
+
+
 @router.delete(
     "/projects/{project_id}",
     status_code=status.HTTP_204_NO_CONTENT,

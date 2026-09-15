@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import DatabaseError, EntityNotFound
@@ -118,6 +118,52 @@ class ProjectRepositoryImpl(BaseRepositoryImpl[ProjectEntity], ProjectRepository
             raise
         except Exception as e:
             raise DatabaseError(f"Failed to delete project {project_id}: {e}") from e
+
+    async def get_deletion_info(
+        self, project_id: UUID
+    ) -> Optional[tuple[Optional[datetime], str]]:
+        """
+        Return (deleted_at, path) for a project, including a deleted one.
+
+        get_by_id deliberately hides deleted projects, but restore has to reason about
+        exactly those. Returns None when no such row exists at all, so the caller can
+        tell "no such project" from "project exists and is not deleted".
+        """
+        try:
+            stmt = select(Project.deleted_at, Project.path).where(
+                Project.id == project_id
+            )
+            result = await self._session.execute(stmt)
+            row = result.first()
+            return (row[0], row[1]) if row else None
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to read deletion info for project {project_id}: {e}"
+            ) from e
+
+    async def is_path_taken(self, path: str, exclude_id: UUID) -> bool:
+        """Whether a different, live project already occupies this path."""
+        try:
+            stmt = select(Project.id).where(
+                Project.path == path,
+                Project.deleted_at.is_(None),
+                Project.id != exclude_id,
+            )
+            result = await self._session.execute(stmt)
+            return result.first() is not None
+        except Exception as e:
+            raise DatabaseError(f"Failed to check path {path}: {e}") from e
+
+    async def restore(self, project_id: UUID) -> None:
+        """Clear a project's deleted_at, making it visible again."""
+        try:
+            stmt = (
+                update(Project).where(Project.id == project_id).values(deleted_at=None)
+            )
+            await self._session.execute(stmt)
+            await self._session.flush()
+        except Exception as e:
+            raise DatabaseError(f"Failed to restore project {project_id}: {e}") from e
 
     async def exists(self, project_id: UUID) -> bool:
         """Check if project exists (including soft-deleted)."""
