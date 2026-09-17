@@ -1,10 +1,12 @@
 """SQLAlchemy implementation of TaskRepository."""
 
+# feature: WORK-01
+
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import DatabaseError, EntityNotFound
@@ -84,3 +86,47 @@ class TaskRepositoryImpl(BaseRepositoryImpl[TaskEntity], TaskRepository):
             raise
         except Exception as e:
             raise DatabaseError(f"Failed to delete task: {e}") from e
+
+    async def restore_by_project(self, project_id: UUID, deleted_at: datetime) -> int:
+        """
+        Un-delete the tasks hidden by one project deletion.
+
+        Matched on the exact timestamp that deletion stamped, so a task deleted at any
+        other moment stays deleted.
+        """
+        try:
+            stmt = (
+                update(Task)
+                .where(
+                    Task.project_id == project_id,
+                    Task.deleted_at == deleted_at,
+                )
+                .values(deleted_at=None)
+            )
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return result.rowcount or 0
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to restore tasks for project {project_id}: {e}"
+            ) from e
+
+    async def soft_delete_by_project(
+        self, project_id: UUID, deleted_at: datetime
+    ) -> int:
+        try:
+            stmt = (
+                update(Task)
+                .where(
+                    Task.project_id == project_id,
+                    Task.deleted_at.is_(None),
+                )
+                .values(deleted_at=deleted_at)
+            )
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return result.rowcount or 0
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to soft-delete tasks for project {project_id}: {e}"
+            ) from e

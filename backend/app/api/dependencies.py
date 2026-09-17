@@ -117,6 +117,7 @@ async def get_project_service(
     return ProjectService(
         project_repo=ProjectRepositoryImpl(db),
         session_repo=SessionRepositoryImpl(db),
+        task_repo=TaskRepositoryImpl(db),
         agent_repo=agent_repo,
     )
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import tempfile
 from pathlib import Path
 from typing import AsyncGenerator, Generator
 
@@ -28,8 +29,23 @@ from fixtures.model_fixtures import (  # noqa: F401, E402
     user_profile,
 )
 
-# Test database URL (use separate test database)
-TEST_DATABASE_URL = settings.database_url.replace("/kumiai_db", "/kumiai_test_db")
+# Test database URL — MUST be isolated from the developer's real database.
+#
+# The test_engine fixture runs Base.metadata.drop_all, so anything this URL points at is
+# destroyed. Deriving it from settings is unsafe: settings.database_url defaults to
+# "sqlite+aiosqlite:///{kumiai_home}/kumiai.db" and the old "/kumiai_db" -> "/kumiai_test_db"
+# substitution only matched the PostgreSQL database name, silently doing nothing on SQLite.
+# That aimed the suite at ~/.kumiai/kumiai.db — the live one.
+#
+# SQLite gets a throwaway file in the OS temp dir. PostgreSQL keeps the separate-database
+# substitution, which is meaningful there.
+if settings.database_url.startswith("sqlite"):
+    _TEST_DB_PATH = Path(tempfile.gettempdir()) / "kumiai_pytest.db"
+    TEST_DATABASE_URL = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
+else:
+    TEST_DATABASE_URL = settings.get_database_url().replace(
+        "/kumiai_db", "/kumiai_test_db"
+    )
 
 
 async def create_enums(conn):

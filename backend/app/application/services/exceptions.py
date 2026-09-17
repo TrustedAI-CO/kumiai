@@ -27,6 +27,18 @@ class ProjectNotFoundError(ServiceError):
     pass
 
 
+class ProjectNotDeletedError(ServiceError):
+    """Restore was requested for a project that is not deleted."""
+
+    pass
+
+
+class ProjectPathConflictError(ServiceError):
+    """Another live project already occupies the path this project needs."""
+
+    pass
+
+
 class SkillNotFoundError(ServiceError):
     """Skill not found."""
 

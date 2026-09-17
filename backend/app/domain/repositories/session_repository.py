@@ -1,6 +1,9 @@
 """Session repository interface."""
 
+# feature: WORK-01
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -139,6 +142,18 @@ class SessionRepository(ABC):
             NotFoundError: If session with given ID doesn't exist.
             RepositoryError: If deletion fails due to database errors.
         """
+        pass
+
+    @abstractmethod
+    async def restore_by_project(self, project_id: UUID, deleted_at: datetime) -> int:
+        """Un-delete the sessions hidden by one project deletion."""
+        pass
+
+    @abstractmethod
+    async def soft_delete_by_project(
+        self, project_id: UUID, deleted_at: datetime
+    ) -> int:
+        """Soft-delete all live sessions for a project."""
         pass
 
     @abstractmethod

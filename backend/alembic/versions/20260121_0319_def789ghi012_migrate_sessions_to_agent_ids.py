@@ -8,9 +8,15 @@ This migration:
 3. Adds check constraint to ensure at least one is set
 
 Revision ID: def789ghi012
-Revises: abc123def456
+Revises: 0cd45723ec3c
 Create Date: 2026-01-21 03:19:00.000000
 
+NOTE (2026-09-15): down_revision used to read "abc123def456". That was a hand-typed
+placeholder id, and on 2026-01-23 a real revision was created that happened to use the
+same string — closing a 13-revision cycle in the graph
+(def789ghi012 -> abc123def456 -> ... -> 5d55bfcf3778 -> def789ghi012). `alembic history`
+hung forever as a result. Repointed at 0cd45723ec3c, the actual predecessor by date
+(2026-01-20 22:48). Nothing re-runs: every database is already stamped past this point.
 """
 
 from typing import Sequence, Union
@@ -22,7 +28,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "def789ghi012"
-down_revision: Union[str, None] = "abc123def456"
+down_revision: Union[str, None] = "0cd45723ec3c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

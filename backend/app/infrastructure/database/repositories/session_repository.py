@@ -1,10 +1,12 @@
 """SQLAlchemy implementation of SessionRepository."""
 
-from datetime import datetime
+# feature: WORK-01
+
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -190,12 +192,78 @@ class SessionRepositoryImpl(BaseRepositoryImpl[SessionEntity], SessionRepository
             if model is None:
                 raise EntityNotFound(f"Session {session_id} not found")
 
-            model.deleted_at = datetime.utcnow()
+            model.deleted_at = datetime.now(timezone.utc)
             await self._session.flush()
         except EntityNotFound:
             raise
         except Exception as e:
             raise DatabaseError(f"Failed to delete session {session_id}: {e}") from e
+
+    async def soft_delete_by_project(
+        self, project_id: UUID, deleted_at: datetime
+    ) -> int:
+        """Soft-delete all live sessions for a project."""
+        try:
+            stmt = (
+                update(Session)
+                .where(
+                    Session.project_id == project_id,
+                    Session.deleted_at.is_(None),
+                )
+                .values(deleted_at=deleted_at)
+            )
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return result.rowcount or 0
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to soft-delete sessions for project {project_id}: {e}"
+            ) from e
+
+    async def restore_by_project(self, project_id: UUID, deleted_at: datetime) -> int:
+        """
+        Un-delete the sessions hidden by one project deletion.
+
+        Matched on the exact timestamp the deletion stamped, so a session deleted at any
+        other moment stays deleted — restoring a project must not resurrect work the
+        user threw away separately.
+
+        Restored sessions come back stopped. They were interrupted when the project was
+        deleted and nothing resumes them, so a status left at WORKING would be a lie
+        about a process that is not running.
+        """
+        # Each target must be a legal transition from its source — this is a bulk UPDATE,
+        # so it bypasses the domain state machine and would happily persist a state the
+        # domain forbids. INITIALIZING cannot become INTERRUPTED (see _STATE_TRANSITIONS);
+        # a session that never finished starting has nothing to interrupt, so it becomes
+        # ERROR, which is both legal and still resumable (error -> idle/working).
+        stopped = {
+            SessionStatus.INITIALIZING.value: SessionStatus.ERROR.value,
+            SessionStatus.WORKING.value: SessionStatus.INTERRUPTED.value,
+        }
+        try:
+            stmt = (
+                update(Session)
+                .where(
+                    Session.project_id == project_id,
+                    Session.deleted_at == deleted_at,
+                )
+                .values(
+                    deleted_at=None,
+                    status=case(
+                        stopped,
+                        value=Session.status,
+                        else_=Session.status,
+                    ),
+                )
+            )
+            result = await self._session.execute(stmt)
+            await self._session.flush()
+            return result.rowcount or 0
+        except Exception as e:
+            raise DatabaseError(
+                f"Failed to restore sessions for project {project_id}: {e}"
+            ) from e
 
     async def exists(self, session_id: UUID) -> bool:
         """Check if session exists (including soft-deleted)."""

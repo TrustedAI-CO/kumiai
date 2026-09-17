@@ -1,8 +1,10 @@
 """Project service - application layer use cases."""
 
+# feature: WORK-01
+
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -14,16 +16,36 @@ from app.application.dtos.requests import (
     UpdateProjectRequest,
 )
 from app.application.services.exceptions import (
+    ProjectNotDeletedError,
     ProjectNotFoundError,
+    ProjectPathConflictError,
 )
 from app.core.config import settings
+from app.core.exceptions import DatabaseError
+from app.core.logging import get_logger
 from app.domain.config.templates import get_project_template
 from app.domain.entities import Project
 from app.domain.repositories import (
     AgentRepository,
     ProjectRepository,
     SessionRepository,
+    TaskRepository,
 )
+
+logger = get_logger(__name__)
+
+
+def _is_path_uniqueness_violation(error: Exception) -> bool:
+    """
+    Whether a database error is the projects.path unique index rejecting a write.
+
+    The repositories wrap driver errors in DatabaseError, so the original exception
+    type is gone by the time it reaches the service and the index name is the only
+    reliable signal left. Both SQLite and PostgreSQL name the offending index in their
+    message, so matching on it is dialect-agnostic and stays narrow — any other database
+    failure keeps propagating as a 500, which is what a genuine fault deserves.
+    """
+    return "idx_projects_path_unique" in str(error)
 
 
 class ProjectService:
@@ -41,11 +63,13 @@ class ProjectService:
         self,
         project_repo: ProjectRepository,
         session_repo: SessionRepository,
+        task_repo: TaskRepository,
         agent_repo: AgentRepository,
     ):
         """Initialize service with repositories."""
         self._project_repo = project_repo
         self._session_repo = session_repo
+        self._task_repo = task_repo
         self._agent_repo = agent_repo
 
     def _sanitize_project_name(self, name: str, add_suffix: bool = True) -> str:
@@ -344,11 +368,170 @@ class ProjectService:
         Args:
             project_id: Project UUID
 
+        Deleting an already-deleted project is a no-op, deliberately. Re-stamping it
+        would move the project's deleted_at to a new moment while its children — no
+        longer live, so skipped by the bulk update — kept the original. Restore matches
+        on the project's stamp, so the children would never come back: a second DELETE
+        would quietly make the first one unrecoverable.
+
+        Args:
+            project_id: Project UUID
+
         Raises:
             ProjectNotFoundError: If project doesn't exist
         """
-        exists = await self._project_repo.exists(project_id)
-        if not exists:
+        info = await self._project_repo.get_deletion_info(project_id)
+        if info is None:
             raise ProjectNotFoundError(f"Project {project_id} not found")
 
-        await self._project_repo.delete(project_id)
+        already_deleted_at, _ = info
+        if already_deleted_at is not None:
+            logger.info(
+                "project_delete_noop_already_deleted",
+                project_id=str(project_id),
+                deleted_at=(
+                    already_deleted_at.isoformat()
+                    if hasattr(already_deleted_at, "isoformat")
+                    else str(already_deleted_at)
+                ),
+            )
+            return
+
+        interrupted, interrupt_failures = await self._stop_running_agents(project_id)
+
+        deleted_at = datetime.now(timezone.utc)
+        task_count = await self._task_repo.soft_delete_by_project(
+            project_id, deleted_at
+        )
+        session_count = await self._session_repo.soft_delete_by_project(
+            project_id, deleted_at
+        )
+        await self._project_repo.delete(project_id, deleted_at)
+        logger.info(
+            "project_soft_deleted",
+            project_id=str(project_id),
+            task_count=task_count,
+            session_count=session_count,
+            interrupted_count=len(interrupted),
+            interrupt_failure_count=len(interrupt_failures),
+            deleted_at=deleted_at.isoformat(),
+        )
+
+    async def restore_project(self, project_id: UUID) -> ProjectDTO:
+        """
+        Restore a soft-deleted project and the children its deletion hid.
+
+        The exact mirror of delete_project. Only children carrying the project's own
+        deletion timestamp come back; a child deleted at any other moment was thrown
+        away separately and stays that way.
+
+        Agents are not restarted. They were stopped when the project was deleted and
+        stopping is not reversible — restoring conversation history is the promise,
+        resuming execution is not.
+
+        Raises:
+            ProjectNotFoundError: no such project
+            ProjectNotDeletedError: the project is not deleted
+            ProjectPathConflictError: a live project now occupies its path
+        """
+        info = await self._project_repo.get_deletion_info(project_id)
+        if info is None:
+            raise ProjectNotFoundError(f"Project {project_id} not found")
+
+        deleted_at, path = info
+        if deleted_at is None:
+            raise ProjectNotDeletedError(f"Project {project_id} is not deleted")
+
+        if await self._project_repo.is_path_taken(path, project_id):
+            raise ProjectPathConflictError(
+                f"Cannot restore project {project_id}: another project already uses "
+                f"{path}. Two projects on one path would give one working directory "
+                f"two agent populations."
+            )
+
+        task_count = await self._task_repo.restore_by_project(project_id, deleted_at)
+        session_count = await self._session_repo.restore_by_project(
+            project_id, deleted_at
+        )
+        try:
+            await self._project_repo.restore(project_id)
+        except DatabaseError as e:
+            # The is_path_taken check above is a read followed by a write, so a
+            # concurrent restore onto the same freed path can slip between them. The
+            # partial unique index is the real arbiter and rejects the loser. Surface
+            # that as the same conflict the check would have reported — losing the race
+            # is not a server fault, and a 500 would tell the caller to retry a request
+            # that will never succeed until the path is freed.
+            if _is_path_uniqueness_violation(e):
+                raise ProjectPathConflictError(
+                    f"Cannot restore project {project_id}: another project took "
+                    f"{path} concurrently."
+                ) from e
+            raise
+
+        logger.info(
+            "project_restored",
+            project_id=str(project_id),
+            task_count=task_count,
+            session_count=session_count,
+            deleted_at=deleted_at.isoformat(),
+        )
+
+        restored = await self._project_repo.get_by_id(project_id)
+        return ProjectDTO.from_entity(restored)
+
+    async def _stop_running_agents(
+        self, project_id: UUID
+    ) -> tuple[List[UUID], List[UUID]]:
+        """
+        Interrupt every agent still running for a project.
+
+        Called BEFORE the project and its children are hidden. The ordering is
+        deliberate and asymmetric: stopping an agent is irreversible, hiding a project
+        is not. An agent left running against a deleted project keeps executing, writing
+        files and spending budget where nobody is looking; an agent stopped by a delete
+        that then fails is merely stopped, and is visible and restartable.
+
+        A failure to interrupt never aborts the deletion (R4) — the session may already
+        be gone or unresponsive, and refusing to delete the project because of it would
+        leave the caller with a project that cannot be removed.
+
+        Returns:
+            (interrupted session ids, session ids that could not be interrupted)
+        """
+        # Imported lazily to avoid a circular import between the API and infrastructure
+        # layers; this mirrors SessionStatusManager and the MCP tools. See the backlog
+        # item "Break the executor circular dependency".
+        from app.api.dependencies import get_session_executor
+
+        interrupted: List[UUID] = []
+        failures: List[UUID] = []
+
+        try:
+            sessions = await self._session_repo.get_by_project_id(project_id)
+            executor = get_session_executor()
+        except Exception as e:
+            # Nothing has been mutated yet, so the deletion can still proceed.
+            logger.warning(
+                "project_delete_agent_lookup_failed",
+                project_id=str(project_id),
+                error=str(e),
+            )
+            return interrupted, failures
+
+        for session in sessions:
+            if not executor.is_processing(session.id):
+                continue
+            try:
+                await executor.interrupt(session.id)
+                interrupted.append(session.id)
+            except Exception as e:
+                failures.append(session.id)
+                logger.warning(
+                    "project_delete_interrupt_failed",
+                    project_id=str(project_id),
+                    session_id=str(session.id),
+                    error=str(e),
+                )
+
+        return interrupted, failures

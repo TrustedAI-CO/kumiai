@@ -1,6 +1,9 @@
 """Project repository interface."""
 
+# feature: WORK-01
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -83,7 +86,9 @@ class ProjectRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, project_id: UUID) -> None:
+    async def delete(
+        self, project_id: UUID, deleted_at: datetime | None = None
+    ) -> None:
         """
         Soft-delete a project.
 
@@ -92,11 +97,29 @@ class ProjectRepository(ABC):
 
         Args:
             project_id: UUID of project to delete.
+            deleted_at: Optional timestamp to use for the soft delete.
 
         Raises:
             NotFoundError: If project with given ID doesn't exist.
             RepositoryError: If deletion fails due to database errors.
         """
+        pass
+
+    @abstractmethod
+    async def get_deletion_info(
+        self, project_id: UUID
+    ) -> Optional[tuple[Optional[datetime], str]]:
+        """Return (deleted_at, path) including for a deleted project, or None."""
+        pass
+
+    @abstractmethod
+    async def is_path_taken(self, path: str, exclude_id: UUID) -> bool:
+        """Whether a different, live project already occupies this path."""
+        pass
+
+    @abstractmethod
+    async def restore(self, project_id: UUID) -> None:
+        """Clear a project's deleted_at, making it visible again."""
         pass
 
     @abstractmethod
