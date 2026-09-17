@@ -232,8 +232,13 @@ class SessionRepositoryImpl(BaseRepositoryImpl[SessionEntity], SessionRepository
         deleted and nothing resumes them, so a status left at WORKING would be a lie
         about a process that is not running.
         """
+        # Each target must be a legal transition from its source — this is a bulk UPDATE,
+        # so it bypasses the domain state machine and would happily persist a state the
+        # domain forbids. INITIALIZING cannot become INTERRUPTED (see _STATE_TRANSITIONS);
+        # a session that never finished starting has nothing to interrupt, so it becomes
+        # ERROR, which is both legal and still resumable (error -> idle/working).
         stopped = {
-            SessionStatus.INITIALIZING.value: SessionStatus.INTERRUPTED.value,
+            SessionStatus.INITIALIZING.value: SessionStatus.ERROR.value,
             SessionStatus.WORKING.value: SessionStatus.INTERRUPTED.value,
         }
         try:

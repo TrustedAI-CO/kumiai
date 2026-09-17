@@ -211,6 +211,41 @@ class TestRestoreByProjectQuery:
         )
 
     # spec: SPEC-work-project-restore R5
+    def test_every_status_reset_is_a_legal_domain_transition(self):
+        """
+        The bulk UPDATE bypasses the state machine, so its mapping must respect it.
+
+        A raw UPDATE will persist any string. Without this check the restore could write
+        a status the domain considers unreachable — INITIALIZING -> INTERRUPTED was
+        exactly that, and nothing at runtime would have complained.
+        """
+        import inspect
+
+        from app.domain.value_objects.session_status import (
+            _STATE_TRANSITIONS,
+            SessionStatus,
+        )
+        from app.infrastructure.database.repositories import session_repository
+
+        source = inspect.getsource(
+            session_repository.SessionRepositoryImpl.restore_by_project
+        )
+        mapping = {
+            src.value: dst.value
+            for src in SessionStatus
+            for dst in SessionStatus
+            if f"SessionStatus.{src.name}.value: SessionStatus.{dst.name}.value"
+            in source
+        }
+
+        assert mapping, "no status mapping found in restore_by_project"
+        for src, dst in mapping.items():
+            assert dst in _STATE_TRANSITIONS.get(src, set()), (
+                f"restore maps {src} -> {dst}, which the domain state machine does not "
+                f"allow (legal: {sorted(_STATE_TRANSITIONS.get(src, set()))})"
+            )
+
+    # spec: SPEC-work-project-restore R5
     async def test_restored_sessions_come_back_stopped(self):
         """A session that was running when deleted is not restored as running."""
         from app.infrastructure.database.repositories.session_repository import (
